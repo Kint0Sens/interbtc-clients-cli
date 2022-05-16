@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["CancelProposal",""],["CancelQueued",""],["CancelReferendum",""],["ClearPublicProposals",""],["EnactProposal",""],["FastTrack",""],["NoteImminentPreimage",""],["NotePreimage",""],["Propose",""],["ReapPreimage",""],["RemoveVote",""],["Second",""],["TransactionApi",""],["Vote",""]]});

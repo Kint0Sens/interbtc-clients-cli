@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Error","A key-related error."]],"struct":[["PrivateKey","A Bitcoin ECDSA private key"],["PublicKey","A Bitcoin ECDSA public key"]]});

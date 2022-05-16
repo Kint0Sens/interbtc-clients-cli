@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["RewardPerToken",""],["RewardTally",""],["Stake",""],["StorageApi",""],["TotalRewards",""],["TotalStake",""]]});

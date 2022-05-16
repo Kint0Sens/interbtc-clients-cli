@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["ArithmeticError",""],["DispatchError",""],["MultiSignature",""],["TokenError",""]],"mod":[["generic",""],["traits",""]],"struct":[["ModuleError",""]]});

@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["DepositOf",""],["LowestUnbaked",""],["Preimages",""],["PublicPropCount",""],["PublicProps",""],["ReferendumCount",""],["ReferendumInfoOf",""],["StorageApi",""],["StorageVersion",""],["VotingOf",""]]});

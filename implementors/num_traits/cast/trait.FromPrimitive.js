@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["bitcoin"] = [{"text":"impl <a class=\"trait\" href=\"https://docs.rs/num-traits/0.2/num_traits/cast/trait.FromPrimitive.html\" title=\"trait num_traits::cast::FromPrimitive\">FromPrimitive</a> for <a class=\"enum\" href=\"bitcoin/enum.BitcoinRpcError.html\" title=\"enum bitcoin::BitcoinRpcError\">BitcoinRpcError</a>","synthetic":false,"types":["bitcoin::error::BitcoinRpcError"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

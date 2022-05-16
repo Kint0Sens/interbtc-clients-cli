@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Inflation",""],["LastEmission",""],["StartHeight",""],["StorageApi",""]]});

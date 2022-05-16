@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["FixedI128",""],["FixedU128",""]]});

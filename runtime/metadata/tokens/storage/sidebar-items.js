@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Accounts",""],["Locks",""],["StorageApi",""],["TotalIssuance",""]]});

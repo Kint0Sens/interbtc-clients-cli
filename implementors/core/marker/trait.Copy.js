@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["subxt_client"] = [{"text":"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/marker/trait.Copy.html\" title=\"trait core::marker::Copy\">Copy</a> for <a class=\"enum\" href=\"subxt_client/enum.Role.html\" title=\"enum subxt_client::Role\">Role</a>","synthetic":false,"types":["subxt_client::Role"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["DepositStake",""],["DistributeReward",""],["WithdrawReward",""],["WithdrawStake",""]]});

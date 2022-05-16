@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["vault"] = [{"text":"impl <a class=\"trait\" href=\"service/trait.Service.html\" title=\"trait service::Service\">Service</a>&lt;<a class=\"struct\" href=\"vault/struct.VaultServiceConfig.html\" title=\"struct vault::VaultServiceConfig\">VaultServiceConfig</a>&gt; for <a class=\"struct\" href=\"vault/struct.VaultService.html\" title=\"struct vault::VaultService\">VaultService</a>","synthetic":false,"types":["vault::system::VaultService"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

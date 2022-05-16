@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["DepositCollateral",""],["OptInToNomination",""],["OptOutOfNomination",""],["SetNominationEnabled",""],["TransactionApi",""],["WithdrawCollateral",""]]});

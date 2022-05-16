@@ -1,0 +1,4 @@
+(function() {var implementors = {};
+implementors["bitcoin"] = [];
+implementors["runtime"] = [{"text":"impl <a class=\"trait\" href=\"bitcoin/trait.BitcoinCoreApi.html\" title=\"trait bitcoin::BitcoinCoreApi\">BitcoinCoreApi</a> for <a class=\"struct\" href=\"runtime/integration/struct.MockBitcoinCore.html\" title=\"struct runtime::integration::MockBitcoinCore\">MockBitcoinCore</a>","synthetic":false,"types":["runtime::integration::bitcoin_simulator::MockBitcoinCore"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

@@ -1,0 +1,1 @@
+initSidebarItems({"constant":[["ABOUT",""],["AUTHORS",""],["NAME",""],["VERSION",""]],"fn":[["main",""]],"mod":[["error",""],["http",""]],"struct":[["FaucetConfig",""],["Opts",""]]});

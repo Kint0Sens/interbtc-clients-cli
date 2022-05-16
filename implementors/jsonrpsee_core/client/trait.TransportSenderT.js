@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["subxt_client"] = [{"text":"impl TransportSenderT for <a class=\"struct\" href=\"subxt_client/struct.Sender.html\" title=\"struct subxt_client::Sender\">Sender</a>","synthetic":false,"types":["subxt_client::Sender"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

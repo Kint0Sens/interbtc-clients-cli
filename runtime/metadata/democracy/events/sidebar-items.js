@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Cancelled",""],["Executed",""],["FastTrack",""],["NotPassed",""],["Passed",""],["PreimageInvalid",""],["PreimageMissing",""],["PreimageNoted",""],["PreimageReaped",""],["PreimageUsed",""],["Proposed",""],["Started",""],["Tabled",""]]});

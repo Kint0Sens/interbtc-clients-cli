@@ -1,0 +1,1 @@
+window.ALL_CRATES = ["bitcoin","faucet","oracle","runtime","service","subxt_client","vault"];

@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["LiquidationCollateralThreshold",""],["LiquidationVault",""],["MinimumCollateralVault",""],["PremiumRedeemThreshold",""],["PunishmentDelay",""],["ReservedAddresses",""],["SecureCollateralThreshold",""],["StorageApi",""],["StorageVersion",""],["SystemCollateralCeiling",""],["TotalUserVaultCollateral",""],["VaultBitcoinPublicKey",""],["Vaults",""]]});

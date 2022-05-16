@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Error",""],["LoggingFormat",""],["RestartPolicy",""],["TerminationStatus",""]],"fn":[["init_subscriber",""],["on_shutdown",""],["spawn_cancelable",""],["wait_or_shutdown",""]],"struct":[["ConnectionManager",""],["MonitoringConfig",""],["ServiceConfig",""]],"trait":[["Service",""]],"type":[["ShutdownReceiver",""],["ShutdownSender",""]]});

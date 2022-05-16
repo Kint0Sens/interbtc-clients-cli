@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Aggregate",""],["AuthorizedOracles",""],["MaxDelay",""],["RawValues",""],["RawValuesUpdated",""],["StorageApi",""],["StorageVersion",""],["ValidUntil",""]]});

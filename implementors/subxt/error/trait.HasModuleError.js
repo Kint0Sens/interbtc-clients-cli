@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["runtime"] = [{"text":"impl HasModuleError for <a class=\"enum\" href=\"runtime/metadata/runtime_types/sp_runtime/enum.DispatchError.html\" title=\"enum runtime::metadata::runtime_types::sp_runtime::DispatchError\">DispatchError</a>","synthetic":false,"types":["runtime::metadata::runtime_types::sp_runtime::DispatchError"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

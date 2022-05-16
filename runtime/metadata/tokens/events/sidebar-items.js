@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["BalanceSet",""],["DustLost",""],["Endowed",""],["RepatriatedReserve",""],["Reserved",""],["Transfer",""],["Unreserved",""]]});

@@ -1,0 +1,4 @@
+(function() {var implementors = {};
+implementors["faucet"] = [{"text":"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/hash/trait.Hash.html\" title=\"trait core::hash::Hash\">Hash</a> for <a class=\"enum\" href=\"faucet/http/enum.FundingRequestAccountType.html\" title=\"enum faucet::http::FundingRequestAccountType\">FundingRequestAccountType</a>","synthetic":false,"types":["faucet::http::FundingRequestAccountType"]}];
+implementors["runtime"] = [{"text":"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/hash/trait.Hash.html\" title=\"trait core::hash::Hash\">Hash</a> for <a class=\"type\" href=\"runtime/types/type.VaultId.html\" title=\"type runtime::types::VaultId\">VaultId</a>","synthetic":false,"types":["runtime::types::metadata_aliases::VaultId"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
