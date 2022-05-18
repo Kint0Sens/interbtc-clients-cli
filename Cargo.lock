@@ -814,22 +814,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4a45a46ab1f2412e53d3a0ade76ffad2025804294569aae387231a0cd6e0899"
 
 [[package]]
-name = "burn"
-version = "0.0.1"
-dependencies = [
- "bitcoin 1.1.0",
- "clap",
- "common",
- "env_logger 0.9.0",
- "git-version",
- "log 0.4.17",
- "runtime",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "byte-slice-cast"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1842,23 +1826,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e43f2f1833d64e33f15592464d6fdd70f349dda7b1a53088eb83cd94014008c5"
 dependencies = [
  "futures 0.3.21",
-]
-
-[[package]]
-name = "explore"
-version = "0.0.1"
-dependencies = [
- "clap",
- "common",
- "env_logger 0.9.0",
- "git-version",
- "log 0.4.17",
- "pad",
- "runtime",
- "tabular",
- "thiserror",
- "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -3049,7 +3016,7 @@ dependencies = [
  "frame-system",
  "frame-system-rpc-runtime-api",
  "interbtc-primitives",
- "issue 1.2.0",
+ "issue",
  "module-btc-relay-rpc-runtime-api",
  "module-issue-rpc-runtime-api",
  "module-oracle-rpc-runtime-api",
@@ -3081,7 +3048,7 @@ dependencies = [
  "pallet-treasury",
  "pallet-utility",
  "parity-scale-codec",
- "redeem 1.2.0",
+ "redeem",
  "refund",
  "relay",
  "replace",
@@ -3197,24 +3164,6 @@ checksum = "879d54834c8c76457ef4293a689b2a8c59b076067ad77b15efafbb05f92a592b"
 
 [[package]]
 name = "issue"
-version = "0.0.1"
-dependencies = [
- "bdk",
- "bitcoin 0.27.1",
- "bitcoin 1.1.0",
- "clap",
- "common",
- "env_logger 0.9.0",
- "git-version",
- "log 0.4.17",
- "runtime",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "issue"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=f1ed5205c29934170b0674e6b60a847028b9735e#f1ed5205c29934170b0674e6b60a847028b9735e"
 dependencies = [
@@ -3244,29 +3193,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "issue_pay"
+name = "issue_bot"
 version = "0.0.1"
 dependencies = [
  "bdk",
  "bitcoin 0.27.1",
  "bitcoin 1.1.0",
- "clap",
- "common",
- "env_logger 0.9.0",
- "git-version",
- "log 0.4.17",
- "runtime",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "issue_request"
-version = "0.0.1"
-dependencies = [
- "bitcoin 1.1.0",
- "cfg-if 1.0.0",
  "clap",
  "common",
  "env_logger 0.9.0",
@@ -6558,22 +6490,6 @@ dependencies = [
 
 [[package]]
 name = "redeem"
-version = "0.0.1"
-dependencies = [
- "bitcoin 1.1.0",
- "clap",
- "common",
- "env_logger 0.9.0",
- "git-version",
- "log 0.4.17",
- "runtime",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "redeem"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=f1ed5205c29934170b0674e6b60a847028b9735e#f1ed5205c29934170b0674e6b60a847028b9735e"
 dependencies = [
@@ -6599,6 +6515,22 @@ dependencies = [
  "sp-runtime",
  "sp-std",
  "vault-registry",
+]
+
+[[package]]
+name = "redeem_bot"
+version = "0.0.1"
+dependencies = [
+ "bitcoin 1.1.0",
+ "clap",
+ "common",
+ "env_logger 0.9.0",
+ "git-version",
+ "log 0.4.17",
+ "runtime",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -6737,7 +6669,7 @@ dependencies = [
  "orml-tokens",
  "orml-traits",
  "parity-scale-codec",
- "redeem 1.2.0",
+ "redeem",
  "refund",
  "replace",
  "scale-info",
@@ -9336,15 +9268,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tabular"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9a2882c514780a1973df90de9d68adcd8871bacc9a6331c3f28e6d2ff91a3d1"
-dependencies = [
- "unicode-width",
-]
-
-[[package]]
 name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9729,22 +9652,6 @@ name = "traitobject"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
-
-[[package]]
-name = "transfer"
-version = "0.0.1"
-dependencies = [
- "bitcoin 1.1.0",
- "clap",
- "common",
- "env_logger 0.9.0",
- "git-version",
- "log 0.4.17",
- "runtime",
- "thiserror",
- "tokio",
- "tracing",
-]
 
 [[package]]
 name = "trie-db"
