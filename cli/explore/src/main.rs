@@ -34,6 +34,16 @@ enum Commands {
     LiquidationVault,
 }
 
+    // // Get list of premium redeem Vaults
+    // let result = parachain.get_premium_redeem_vaults().await;
+    // //  let result = parachain.get_vaults_with_issuable_tokens().await?;
+     
+    //  tracing::info!("Call done.");
+    //  match  result {
+    //      Ok(premium_redeem_vaults) => tracing::info!("{:#?}",premium_redeem_vaults[0]),
+    //      Err(error) => tracing::info!("Error returned: {:?}",error),
+    //  };
+
 #[derive(Parser)]
 #[clap(name = NAME, version = VERSION, author = AUTHORS, about = ABOUT)]
 struct Cli {
