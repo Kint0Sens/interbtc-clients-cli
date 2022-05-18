@@ -1,0 +1,40 @@
+[package]
+name = "issue"
+version = "0.0.1"
+authors = ["https://github.com/Kint0Sens"]
+edition = "2018"
+description = "InterBTC command line tools - Issue"
+
+[dependencies]
+log = "0.4.6"
+env_logger = "0.9.0"
+tracing = { version = "0.1", features = ["log"] }
+clap = "3.1"
+#chrono = "0.4.19"
+tokio = { version = "1.0", features = ["full"] }
+thiserror = "1.0"
+#jsonrpc-http-server = "18.0.0"
+#parity-scale-codec = "2.0.0"
+#serde_json = "1.0.57"
+#serde = "1.0.116"
+#hex = "0.4.2"
+#kv = { version = "0.22.0", features = ["json-value"] }
+#async-trait = "0.1.40"
+#futures = "0.3.5"
+git-version = "0.3.4"
+
+# Workspace dependencies
+runtime = { path = "../../runtime" }
+bitcoin = { path = "../../bitcoin" }
+real-bitcoin = { version = "0.27.1", package = "bitcoin" }
+bdk = "0.16.0"
+common = { path = "../common" }
+
+[dev-dependencies]
+
+# Workspace dependencies
+runtime = { path = "../../runtime", features = ["testing-utils"] }
+bitcoin = { path = "../../bitcoin", features = ["cli"] }
+real-bitcoin = { version = "0.27.1", package = "bitcoin" }
+# Substrate dependencies
+#sp-keyring = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.8" }
