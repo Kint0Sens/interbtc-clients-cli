@@ -22,12 +22,12 @@ use runtime::{
         UtilFuncs,
         BtcAddress,
         Ss58Codec,
-        VaultId,
-        AccountId,
-
+        // VaultId,
+        // AccountId,
+        CurrencyIdExt,
+        CurrencyInfo,
         parse_collateral_currency,
         parse_wrapped_currency,
-        parse_native_currency,
         };
 use bitcoin::PartialAddress;
 
@@ -63,12 +63,12 @@ struct Cli {
 pub struct ToolConfig {
     /// Amount to redeem, in satoshis, 
     /// must be greater than Bridge Fee + BTC Network Fee + BTC Dust Limit 
-    #[clap(long, validator = amount_gt_minimal)]
+    #[clap(long, validator = amount_gt_minimal, default_value = "999999999999999999999")]
     max_redeem_amount: u128,
 
     /// Minimum wallet amount of wrapped token in sat, 
     /// bot will not trigger redeem when balance is below this amount
-    #[clap(long)]
+    #[clap(long, default_value = "2000")]
     min_wrapped: u128,
 
     /// Sleep time before checking balance again
@@ -80,21 +80,18 @@ pub struct ToolConfig {
     /// when no premium redeem vault available
     #[clap(long, default_value = "60")]
     sleeptime_no_premium_vault: u64,
-    // /// Beneficiary Btc Wallet address. In string format
+
+    /// Beneficiary Btc Wallet address. In string format
     #[clap(long)]
     btc_address: String,
 
-    /// Vault to redeem from - account
-    #[clap(long)]
-    vault_account_id: AccountId,
+    /// Collateral
+    #[clap(long, default_value = "KSM")]  // Make network dependent default
+    chain_collateral_id: String,
 
-    /// Vault to redeem from - collateral
-    #[clap(long, default_value = "KSM")] 
-    vault_collateral_id: String,
-
-    /// Vault to redeem from
-    #[clap(long, default_value = "KBTC")] 
-    vault_wrapped_id: String,
+    /// Wrapped
+    #[clap(long, default_value = "KBTC")] // Make network dependent default
+    chain_wrapped_id: String,
 }
 #[allow(unreachable_code)]
 #[tokio::main]
@@ -106,9 +103,9 @@ async fn main() -> Result<(), Error> {
     let config = cli.config;
     // let redeem_amount = config.redeem_amount;
     let btc_address : BtcAddress = BtcAddress::decode_str(&config.btc_address).unwrap();
-    let collateral_id  = parse_collateral_currency(&config.vault_collateral_id).unwrap();
-    let wrapped_id  = parse_wrapped_currency(&config.vault_wrapped_id).unwrap();
-    let vault_id = VaultId::new(config.vault_account_id, collateral_id, wrapped_id);
+    let collateral_id  = parse_collateral_currency(&config.chain_collateral_id).unwrap();
+    let wrapped_id  = parse_wrapped_currency(&config.chain_wrapped_id).unwrap();
+    // let vault_id = VaultId::new(config.vault_account_id, collateral_id, wrapped_id);
 
     // User keys
     let (key_pair, _) = cli.account_info.get_key_pair()?;
@@ -121,31 +118,38 @@ async fn main() -> Result<(), Error> {
     tracing::trace!("TEXT_CONNECT_ATTEMPT");
     let parachain = parachain_config.try_connect(signer.clone(), shutdown_tx.clone()).await?;
     tracing::info!("TEXT_CONNECTED");
+    let native_id = parachain.get_native_currency_id();
     // let signer_account_id = parachain.get_account_id();
-    let signer_account_id = parachain.get_account_id();
-    let balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
-    let balance_collateral = parachain.get_free_balance_for_id(signer_account_id.clone(),collateral_id).await?;
-    // let balance_parachain = parachain.get_free_balance_for_id(signer_account_id.clone(),PARACHAIN_TOKEN_ID).await?;
+    let mut balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
+    let mut balance_collateral = parachain.get_free_balance_for_id(signer_account_id.clone(),collateral_id).await?;
+    let mut balance_native = parachain.get_free_balance_for_id(signer_account_id.clone(),native_id).await?;
 
 
     tracing::info!("Signer:                {}",signer_account_id.to_ss58check());
-    tracing::info!("Vault:                 {}",vault_id.account_id.to_ss58check());
+    // tracing::info!("Vault:                 {}",vault_id.account_id.to_ss58check());
     tracing::info!("BTC Address:           {}",config.btc_address);
     tracing::info!("BTC Address:           {:?}",btc_address);
-    tracing::info!("Max Redeem amount:     {} {} Sat",config.max_redeem_amount, config.vault_wrapped_id);
-    tracing::info!("Min Wrapped balance:   {} {} Sat",config.max_redeem_amount, config.vault_wrapped_id);
+    tracing::info!("Max Redeem amount:     {} {} Sat",config.max_redeem_amount, config.chain_wrapped_id);
+    tracing::info!("Min Wrapped balance:   {} {} Sat",config.max_redeem_amount, config.chain_wrapped_id);
 
-    // tracing::info!("Balances(sat/planck):  {}/{}/{} {}/{}/{}", config.vault_wrapped_id,balance);
-
+    tracing::info!("Balances(sat/planck):  {}/{}/{} {}/{}/{:?}", 
+        balance_wrapped,
+        balance_collateral,
+        balance_native,
+        config.chain_wrapped_id,
+        config.chain_collateral_id,
+        native_id
+    );
+    tracing::info!("{}", native_id.inner().name().to_lowercase());
 
     //Main loop
     loop {
         // Is there enough wrapped balance to proceed?
-        let balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
-        tracing::info!("{} balance:        {}  Sat", config.vault_wrapped_id,balance_wrapped);
+        // let balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
+        // tracing::info!("{} balance:        {}  Sat", config.chain_wrapped_id,balance_wrapped);
      
         if balance_wrapped < config.min_wrapped {
-            tracing::warn!("{} balance lower than minimum balance of {}  Sat", config.vault_wrapped_id, config.min_wrapped);
+            tracing::warn!("{} balance lower than minimum balance of {}  Sat", config.chain_wrapped_id, config.min_wrapped);
             tracing::info!("Waiting {} seconds before checking again", config.sleeptime_not_enough_balance);
             thread::sleep(Duration::from_secs(config.sleeptime_not_enough_balance));
             continue;
@@ -200,12 +204,33 @@ async fn main() -> Result<(), Error> {
         // tracing::info!("Parachain confirms redeem request to vault {} of {} {} Sat to BTC address {}",
         //         vault_id.account_id.to_ss58check(),
         //         amount,
-        //         config.vault_wrapped_id,
+        //         config.chain_wrapped_id,
                 // btc_address.encode_str(BITCOIN_NETWORK).unwrap());
 
         // Evaluate the reward by checking balances and reporting deltas
-
-
+        let balance_wrapped_new = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
+        let balance_collateral_new = parachain.get_free_balance_for_id(signer_account_id.clone(),collateral_id).await?;
+        let balance_native_new = parachain.get_free_balance_for_id(signer_account_id.clone(),native_id).await?;
+        tracing::info!("Balances(sat/planck):  {}/{}/{} {}/{}/{:?}", 
+            balance_wrapped_new,
+            balance_collateral_new,
+            balance_native_new,
+            config.chain_wrapped_id,
+            config.chain_collateral_id,
+            native_id
+        );
+        tracing::info!("{}", native_id.inner().name().to_lowercase());
+        tracing::info!("Deltas(sat/planck):  {}/{}/{} {}/{}/{:?}", 
+            balance_wrapped_new - balance_wrapped,
+            balance_collateral_new - balance_collateral,
+            balance_native_new - balance_native,
+            config.chain_wrapped_id,
+            config.chain_collateral_id,
+            native_id
+        );
+        balance_wrapped = balance_wrapped_new;
+        balance_collateral = balance_collateral_new;
+        balance_native = balance_native_new;
 
     }
 
