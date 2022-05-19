@@ -1471,7 +1471,7 @@ pub trait VaultRegistryPallet {
  //CLI begin
     async fn get_all_vaults_really_all(&self) -> Result<Vec<InterBtcVault>, Error>;
 
-    async fn get_all_premium_redeem_vaults(&self) -> Result<Vec<(VaultId, BalanceWrapper<Balance>)>, Error>;
+    async fn get_premium_redeem_vaults(&self) -> Result<Vec<(VaultId, BalanceWrapper<Balance>)>, Error>;
 
     async fn get_issuable_tokens_from_vault(&self, vault_id: VaultId) -> Result<u128, Error>;
 
@@ -1709,7 +1709,7 @@ impl VaultRegistryPallet for InterBtcParachain {
         Ok(vaults)
     }
 
-    async fn get_all_premium_redeem_vaults(&self) -> Result<Vec<(VaultId, BalanceWrapper<Balance>)>, Error> {
+    async fn get_premium_redeem_vaults(&self) -> Result<Vec<(VaultId, BalanceWrapper<Balance>)>, Error> {
         let head = self.get_latest_block_hash().await?;
         let result : Vec<(VaultId, BalanceWrapper<Balance>)> = self
         .rpc()

@@ -84,8 +84,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init_from_env(init_logger(cli.verbose));
 
     if cli.testmode > 0 {
-        tracing::info!("Running ni test mode, not signing transactions");
+        tracing::info!("Running in test mode, not signing transactions");
     }
+
+    // 1 Identify Premium Redeem Vault
+    // 2 Request Redeem
+    // 3 Report KSM Gain
+    // 4 repeat
 
     // User keys
     let (key_pair, _) = cli.account_info.get_key_pair()?;
