@@ -1,4 +1,4 @@
-mod error;
+// mod error;
 
 use std::env;
 use clap::Parser;
@@ -12,7 +12,7 @@ use std::time::Duration;
 
 
 //cli related
-use error::Error;
+// use error::Error;
 //interBTC related
 use runtime::{
         VaultRegistryPallet,

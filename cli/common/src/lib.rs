@@ -1,6 +1,6 @@
 use std::env;
 mod error;
-use error::Error;
+pub use error::Error;
 use pad::{PadStr, Alignment};
 // use clap::Parser;
 // use std::str::FromStr;

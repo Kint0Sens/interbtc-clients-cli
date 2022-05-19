@@ -1,13 +1,10 @@
 
 use std::str::FromStr;
 
-// mod error;
 
 use clap::Parser;
 use git_version::git_version;
 
-//Tool code
-// use error::Error;
 use bitcoin::PartialAddress;
 //interBTC related
 use runtime::{
@@ -26,10 +23,7 @@ use bdk::{
     // wallet::AddressIndex,
      Wallet, SignOptions,
 };
-use common::{
-    init_logger,
-    BITCOIN_NETWORK,
-};
+use common::*;
 
 const VERSION: &str = git_version!(args = ["--tags"]);
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
