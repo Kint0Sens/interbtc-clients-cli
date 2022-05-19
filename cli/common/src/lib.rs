@@ -48,20 +48,20 @@ cfg_if::cfg_if! {
 pub const TEXT_CONNECT_ATTEMPT : &str = "Attempting connection to parachain";
 pub const TEXT_CONNECTED : &str = "Connected to Parachain";
 
-#[allow(unused_assignments)]
-pub fn native_currency() -> String {
-    let mut native_currency = "INTR".to_string();
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "standalone-metadata")] {
-            native_currency =  "KINT".to_string();
-        } else if #[cfg(feature = "parachain-metadata-kintsugi")] {
-            native_currency =  "KINT".to_string();
-        } else if #[cfg(feature = "parachain-metadata-testnet")] {
-            native_currency =  "KINT".to_string();
-        }
-    }
-    native_currency
-}
+// #[allow(unused_assignments)]
+// pub fn native_currency() -> String {
+//     let mut native_currency = "INTR".to_string();
+//     cfg_if::cfg_if! {
+//         if #[cfg(feature = "standalone-metadata")] {
+//             native_currency =  "KINT".to_string();
+//         } else if #[cfg(feature = "parachain-metadata-kintsugi")] {
+//             native_currency =  "KINT".to_string();
+//         } else if #[cfg(feature = "parachain-metadata-testnet")] {
+//             native_currency =  "KINT".to_string();
+//         }
+//     }
+//     native_currency
+// }
 
 // Get Program Name    
 pub fn prog_name_get() -> Option<String> {

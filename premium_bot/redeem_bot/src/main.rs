@@ -27,6 +27,7 @@ use runtime::{
 
         parse_collateral_currency,
         parse_wrapped_currency,
+        parse_native_currency,
         };
 use bitcoin::PartialAddress;
 
@@ -63,12 +64,12 @@ pub struct ToolConfig {
     /// Amount to redeem, in satoshis, 
     /// must be greater than Bridge Fee + BTC Network Fee + BTC Dust Limit 
     #[clap(long, validator = amount_gt_minimal)]
-    redeem_amount: u128,
+    max_redeem_amount: u128,
 
     /// Minimum wallet amount of wrapped token in sat, 
     /// bot will not trigger redeem when balance is below this amount
     #[clap(long)]
-    minimum_wrapped: u128,
+    min_wrapped: u128,
 
     /// Sleep time before checking balance again
     ///  when not enough wrapped balance
@@ -103,7 +104,7 @@ async fn main() -> Result<(), Error> {
  
  
     let config = cli.config;
-    let redeem_amount = config.redeem_amount;
+    // let redeem_amount = config.redeem_amount;
     let btc_address : BtcAddress = BtcAddress::decode_str(&config.btc_address).unwrap();
     let collateral_id  = parse_collateral_currency(&config.vault_collateral_id).unwrap();
     let wrapped_id  = parse_wrapped_currency(&config.vault_wrapped_id).unwrap();
@@ -120,15 +121,22 @@ async fn main() -> Result<(), Error> {
     tracing::trace!("TEXT_CONNECT_ATTEMPT");
     let parachain = parachain_config.try_connect(signer.clone(), shutdown_tx.clone()).await?;
     tracing::info!("TEXT_CONNECTED");
-
-    tracing::info!("Signer:         {}",signer_account_id.to_ss58check());
-    tracing::info!("Vault:          {}",vault_id.account_id.to_ss58check());
-    tracing::info!("BTC Address     {}",config.btc_address);
-    tracing::info!("BTC Address     {:?}",btc_address);
-    tracing::info!("Redeem amount:  {} {} Sat",config.redeem_amount, config.vault_wrapped_id);
- 
-
+    // let signer_account_id = parachain.get_account_id();
     let signer_account_id = parachain.get_account_id();
+    let balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
+    let balance_collateral = parachain.get_free_balance_for_id(signer_account_id.clone(),collateral_id).await?;
+    // let balance_parachain = parachain.get_free_balance_for_id(signer_account_id.clone(),PARACHAIN_TOKEN_ID).await?;
+
+
+    tracing::info!("Signer:                {}",signer_account_id.to_ss58check());
+    tracing::info!("Vault:                 {}",vault_id.account_id.to_ss58check());
+    tracing::info!("BTC Address:           {}",config.btc_address);
+    tracing::info!("BTC Address:           {:?}",btc_address);
+    tracing::info!("Max Redeem amount:     {} {} Sat",config.max_redeem_amount, config.vault_wrapped_id);
+    tracing::info!("Min Wrapped balance:   {} {} Sat",config.max_redeem_amount, config.vault_wrapped_id);
+
+    // tracing::info!("Balances(sat/planck):  {}/{}/{} {}/{}/{}", config.vault_wrapped_id,balance);
+
 
     //Main loop
     loop {
@@ -136,15 +144,15 @@ async fn main() -> Result<(), Error> {
         let balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
         tracing::info!("{} balance:        {}  Sat", config.vault_wrapped_id,balance_wrapped);
      
-        if balance_wrapped < config.minimum_wrapped {
-            tracing::warn!("{} balance lower than minimum balance of {}  Sat", config.vault_wrapped_id, config.minimum_wrapped);
+        if balance_wrapped < config.min_wrapped {
+            tracing::warn!("{} balance lower than minimum balance of {}  Sat", config.vault_wrapped_id, config.min_wrapped);
             tracing::info!("Waiting {} seconds before checking again", config.sleeptime_not_enough_balance);
             thread::sleep(Duration::from_secs(config.sleeptime_not_enough_balance));
             continue;
         }
         // Is there some premium redeem available on a vault
         let result = parachain.get_premium_redeem_vaults().await;
-        match result {
+        match &result {
             Ok(premium_vaults) => {
                 if premium_vaults.len() == 0 {
                     tracing::warn!("No premium redeem vault found");
@@ -162,44 +170,46 @@ async fn main() -> Result<(), Error> {
         }
 
         let premium_vaults = result.unwrap();
-        // select 1st vault with sufficient premium redeemable amount compared to mawimum_redeem
-        // if none match the maximum_redeem get the greatest amt
-        let mut max_premiumm_amt; 
-        let mut index = 0;
-        let mut vault_index : i32;
-        for (vault, premium_amt) in premium_vaults.into_iter() {
-            if premium_amt.amount > config.redeem_amount {
-                // Found eligible vault. use it
+        // select 1st vault with sufficient premium redeemable amount compared to configured max_redeem_amount
+        // if none match the max_redeem_amount get the greatest amt
+        let mut max_premiumm_amt = 0; 
+        let mut index : usize = 0;
+        let mut vault_index : usize = 0;
 
+        for (_, loop_premium_amt) in premium_vaults.iter() {
+            if loop_premium_amt.amount > config.max_redeem_amount {
+                // Found eligible vault. use it
+                vault_index = index;
+                break;
             };
-            if max_premiumm_amt <= premium_amt.amount {
-                max_premiumm_amt = premium_amt.amount;
+            if max_premiumm_amt <= loop_premium_amt.amount {
+                max_premiumm_amt = loop_premium_amt.amount;
                 vault_index = index;
             }; 
             index = index + 1;
         };
-        // Redeem
+
+        let (target_vault, premium_amt) =  &premium_vaults[vault_index];
         // Send redeem request
-        // let _redeem_id = parachain.request_redeem(amount, btc_address, &vault_id).await?;
-        // tracing::info!("Vault {} confirmed redeem request of {} {} Sat to BTC address {}",
+        let redeem_amount = if premium_amt.amount > config.max_redeem_amount {
+            config.max_redeem_amount
+        } else {
+            premium_amt.amount
+        };
+        let _redeem_id = parachain.request_redeem(redeem_amount, btc_address, &target_vault).await?;
+        // tracing::info!("Parachain confirms redeem request to vault {} of {} {} Sat to BTC address {}",
         //         vault_id.account_id.to_ss58check(),
         //         amount,
         //         config.vault_wrapped_id,
-        //         btc_address.encode_str(BITCOIN_NETWORK).unwrap());
+                // btc_address.encode_str(BITCOIN_NETWORK).unwrap());
 
-        // Evaluate the reward
+        // Evaluate the reward by checking balances and reporting deltas
+
 
 
     }
 
 
- 
-    // if balance < amount {
-    //     tracing::error!("Insufficient {} Balance - Cancelling", config.vault_wrapped_id);
-    //     return Ok(())
-    // }    
-
-    
     Ok(())
      
     }
