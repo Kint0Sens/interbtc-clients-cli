@@ -143,6 +143,12 @@ async fn main() -> Result<(), Error> {
     tracing::info!("{}", native_id.inner().name().to_lowercase());
 
     //Main loop
+    // Check available wrapped balance
+    // Identify Premium Redeem Vault
+    // Request Redeem
+    // Report KSM Gain
+    // repeat
+
     loop {
         // Is there enough wrapped balance to proceed?
         // let balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;

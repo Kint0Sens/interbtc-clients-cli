@@ -81,10 +81,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("Running in test mode, not signing transactions");
     }
 
-    // 1 Identify Premium Redeem Vault
-    // 2 Request Redeem
-    // 3 Report KSM Gain
-    // 4 repeat
+     //Main loop
+    // Check available btc balance
+    // Identify Vault with issuable capacity
+    // Request Issue
+    // Pay Issue
+    // Report balance
+    // repeat
 
     // User keys
     let (key_pair, _) = cli.account_info.get_key_pair()?;
@@ -101,6 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Signer:           {}",signer_account_id.to_ss58check());
    
+    // Setup wallet
     let external_descriptor = "wpkh(tprv8ZgxMBicQKsPctgasNzABhRCAfReohQPdu235WxXhu7yuh3by91GhqZgRGN6GEdARTEWJ2iURcjtbAub8ifnzbym5vGs4V54DwK8VL9b9oZ/84'/0'/0'/0/*)";
     let internal_descriptor = "wpkh(tprv8ZgxMBicQKsPctgasNzABhRCAfReohQPdu235WxXhu7yuh3by91GhqZgRGN6GEdARTEWJ2iURcjtbAub8ifnzbym5vGs4V54DwK8VL9b9oZ/84'/0'/0'/1/*)";
     let wallet: Wallet<ElectrumBlockchain, MemoryDatabase> = Wallet::new(

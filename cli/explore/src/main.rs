@@ -1,5 +1,3 @@
-mod error;
-
 use std::env;
 use clap::Parser;
 use clap::Subcommand;
@@ -7,7 +5,6 @@ use git_version::git_version;
 use tabular::{Table, Row};
 
 //interBTC related
-use error::Error;
 use runtime::InterBtcSigner;
 use runtime::VaultRegistryPallet;
 use runtime::CurrencyIdExt;

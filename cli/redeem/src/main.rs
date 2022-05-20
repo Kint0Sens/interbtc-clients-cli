@@ -1,5 +1,3 @@
-mod error;
-
 use std::env;
 use clap::Parser;
 
@@ -9,8 +7,6 @@ use std::ops::RangeInclusive;
 use common::*;
 
 
-//cli related
-use error::Error;
 //interBTC related
 use runtime::{
         RedeemPallet,

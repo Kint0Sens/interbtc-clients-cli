@@ -1,5 +1,3 @@
-mod error;
-
 use std::{env};
 use clap::Parser;
 
@@ -8,8 +6,6 @@ use git_version::git_version;
 use common::*;
 
 
-//cli related
-use error::Error;
 //interBTC related
 // use crate::Ss58Codec;
 use runtime::{
