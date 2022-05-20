@@ -7,6 +7,8 @@ use pad::{PadStr, Alignment};
 // use std::ops::RangeInclusive;
 use std::path::Path;
 use std::ffi::OsStr;
+use std::ops::RangeInclusive;
+use std::str::FromStr;
 use bitcoin::Network;
 use bdk::{
         Error as BdkError,

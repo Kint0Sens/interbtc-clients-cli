@@ -1,19 +1,11 @@
-// mod error;
-
 use std::env;
 use clap::Parser;
 
 use git_version::git_version;
-use std::str::FromStr;
-use std::ops::RangeInclusive;
 use common::*;
 use std::thread;
 use std::time::Duration;
 
-
-//cli related
-// use error::Error;
-//interBTC related
 use runtime::{
         VaultRegistryPallet,
         RedeemPallet,
@@ -22,8 +14,6 @@ use runtime::{
         UtilFuncs,
         BtcAddress,
         Ss58Codec,
-        // VaultId,
-        // AccountId,
         CurrencyIdExt,
         CurrencyInfo,
         parse_collateral_currency,
@@ -35,7 +25,6 @@ const VERSION: &str = git_version!(args = ["--tags"]);
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 const NAME: &str = env!("CARGO_PKG_NAME");
 const ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
-const TOO_FEW_SATS: RangeInclusive<u128> = 1..=1999;
 
 
 #[derive(Parser)]
@@ -151,9 +140,6 @@ async fn main() -> Result<(), Error> {
 
     loop {
         // Is there enough wrapped balance to proceed?
-        // let balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
-        // tracing::info!("{} balance:        {}  Sat", config.chain_wrapped_id,balance_wrapped);
-     
         if balance_wrapped < config.min_wrapped {
             tracing::warn!("{} balance lower than minimum balance of {}  Sat", config.chain_wrapped_id, config.min_wrapped);
             tracing::info!("Waiting {} seconds before checking again", config.sleeptime_not_enough_balance);
@@ -199,19 +185,20 @@ async fn main() -> Result<(), Error> {
             index = index + 1;
         };
 
-        let (target_vault, premium_amt) =  &premium_vaults[vault_index];
+        let (target_vault_id, premium_amt) =  &premium_vaults[vault_index];
         // Send redeem request
         let redeem_amount = if premium_amt.amount > config.max_redeem_amount {
             config.max_redeem_amount
         } else {
             premium_amt.amount
         };
-        let _redeem_id = parachain.request_redeem(redeem_amount, btc_address, &target_vault).await?;
-        // tracing::info!("Parachain confirms redeem request to vault {} of {} {} Sat to BTC address {}",
-        //         vault_id.account_id.to_ss58check(),
-        //         amount,
-        //         config.chain_wrapped_id,
-                // btc_address.encode_str(BITCOIN_NETWORK).unwrap());
+        let _redeem_id = parachain.request_redeem(redeem_amount, btc_address, &target_vault_id).await?;
+        tracing::info!("Parachain confirms redeem request to vault {} of {} {} Sat to BTC address {}",
+                target_vault_id.account_id.to_ss58check(),
+                redeem_amount,
+                config.chain_wrapped_id,
+                btc_address.encode_str(BITCOIN_NETWORK).unwrap()
+            );
 
         // Evaluate the reward by checking balances and reporting deltas
         let balance_wrapped_new = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
@@ -239,22 +226,6 @@ async fn main() -> Result<(), Error> {
         balance_native = balance_native_new;
 
     }
+    Ok(())  
+}
 
-
-    Ok(())
-     
-    }
-
-    fn amount_gt_minimal(s: &str) -> Result<(), String> {
-        //TODO: Dynamic calc of minimal amount?
-        u128::from_str(s)
-        .map(|amt| !TOO_FEW_SATS.contains(&amt))
-        .map_err(|e| e.to_string())
-        .and_then(|result| match result {
-            true => Ok(()),
-            false => Err(format!(
-                "Amount in Sat should exceed {}",
-                TOO_FEW_SATS.end()
-            )),
-        })
-    }
