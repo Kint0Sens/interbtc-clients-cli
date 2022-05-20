@@ -144,3 +144,18 @@ pub fn pretty_print_currency_amount(amount: u128, currency: CurrencyId) -> Resul
     pretty_print_planck_amount(amount, currency.inner().decimals() as u32 )
 }
 
+
+pub const TOO_FEW_SATS: RangeInclusive<u128> = 1..=1999;
+pub fn amount_gt_minimal(s: &str) -> Result<(), String> {
+    //TODO: Dynamic calc of minimal amount?
+    u128::from_str(s)
+    .map(|amt| !TOO_FEW_SATS.contains(&amt))
+    .map_err(|e| e.to_string())
+    .and_then(|result| match result {
+        true => Ok(()),
+        false => Err(format!(
+            "Amount in Sat should exceed {}",
+            TOO_FEW_SATS.end()
+        )),
+    })
+}

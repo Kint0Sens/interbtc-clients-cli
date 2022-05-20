@@ -71,7 +71,7 @@ pub struct ToolConfig {
     /// Min Amount to issue, in satoshis, 
     /// must be greater than Bridge Fee + BTC Network Fee + BTC Dust Limit 
     #[clap(long, validator = amount_gt_minimal, default_value = "2000")]
-    max_issue_amount: u128,
+    min_issue_amount: u128,
 
     /// Minimum btc wallet amount in sat, 
     /// bot will not trigger issue when balance is below this amount
@@ -160,94 +160,94 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // tracing::info!("Generated Address: {}", address);
 
     // Main loop
-    loop {
-        // Check available btc balance
-        tracing::info!("Synching wallet");
-        wallet.sync(noop_progress(), None)?;
-        let balance = wallet.get_balance()?;
-        tracing::info!("Wallet balance in SAT: {}", balance);
-        if balance < min_btc_balance {
-            // Not enough BTC. Sleep and retry later.
-            tracing::warn!("Not enough BTC balance.");
-            tracing::info!("Waiting {} seconds before checking again", config.sleeptime_not_enough_btc);
-            thread::sleep(Duration::from_secs(config.sleeptime_not_enough_btc));
-            continue;        
-        };
+    // loop {
+    //     // Check available btc balance
+    //     tracing::info!("Synching wallet");
+    //     wallet.sync(noop_progress(), None)?;
+    //     let balance = wallet.get_balance()?;
+    //     tracing::info!("Wallet balance in SAT: {}", balance);
+    //     if balance < min_btc_balance {
+    //         // Not enough BTC. Sleep and retry later.
+    //         tracing::warn!("Not enough BTC balance.");
+    //         tracing::info!("Waiting {} seconds before checking again", config.sleeptime_not_enough_btc);
+    //         thread::sleep(Duration::from_secs(config.sleeptime_not_enough_btc));
+    //         continue;        
+    //     };
 
-        // Identify Vault with issuable capacity (or use forced vault)
-        let vault_id;
-        if force_vault == true {
-            vault_id = force_vault_id;
-        } else {
-            // Get eligible vaults
-            // Select one with issueable amount > max_issue_amount is found
-            // else take the one with greatest issuable amt
-            let vaults : Vec<_> = parachain.get_all_vaults().await?;
-            let current_height = parachain.get_current_active_block_number().await?;
-            let mut max_issuable_amt = 0; 
-            let mut max_issuable_vault : VaultId;
-            for vault in vaults.iter() {
-                match vault.status {
-                    VaultStatus::Active(active) => {
-                        if active == false { // Vault set to inactive, does not accept issue requests
-                            continue; 
-                        };
-                        let loop_issuable_amount: u128 =  parachain.get_issuable_tokens_from_vault(vault.clone()).await?;
-                        if max_issuable_amt <= loop_issuable_amt.amount {
-                            max_issuable_amt = loop_issuable_amt.amount;
-                            max_issuable_vault = vault.clone();
-                        }; 
+    //     // Identify Vault with issuable capacity (or use forced vault)
+    //     let vault_id;
+    //     if force_vault == true {
+    //         vault_id = force_vault_id;
+    //     } else {
+    //         // Get eligible vaults
+    //         // Select one with issueable amount > max_issue_amount is found
+    //         // else take the one with greatest issuable amt
+    //         let vaults : Vec<_> = parachain.get_all_vaults().await?;
+    //         let current_height = parachain.get_current_active_block_number().await?;
+    //         let mut max_issuable_amt = 0; 
+    //         let mut max_issuable_vault : VaultId;
+    //         for vault in vaults.iter() {
+    //             match vault.status {
+    //                 VaultStatus::Active(active) => {
+    //                     if active == false { // Vault set to inactive, does not accept issue requests
+    //                         continue; 
+    //                     };
+    //                     let loop_issuable_amount: u128 =  parachain.get_issuable_tokens_from_vault(vault.clone()).await?;
+    //                     if max_issuable_amt <= loop_issuable_amt.amount {
+    //                         max_issuable_amt = loop_issuable_amt.amount;
+    //                         max_issuable_vault = vault.clone();
+    //                     }; 
                                     
-                    }
-                    _ => {},
-            }
+    //                 }
+    //                 _ => {},
+    //         }
 
-            if max_issuable_amt > config.min_issue_amount {
-                vault_id = max_issuable_vault;
-                tracing::info!("Selected vault {} with issuable amount of {} {}",
-                                vault_id.id.account_id.pretty_print(),
-                                max_issuable_amt,
-                                wrapped_id );
-            } else {
-                // No vault found to execute issue. Sleep and retry later
-                tracing::warn!("No vault available with issuable amount above minimum issue amount");
-                tracing::info!("Waiting {} seconds before checking again", config.sleeptime_no_issuable_vault);
-                thread::sleep(Duration::from_secs(config.sleeptime_no_issuable_vault));
-                continue;
-            };
+    //         if max_issuable_amt > config.min_issue_amount {
+    //             vault_id = max_issuable_vault;
+    //             tracing::info!("Selected vault {} with issuable amount of {} {}",
+    //                             vault_id.id.account_id.pretty_print(),
+    //                             max_issuable_amt,
+    //                             wrapped_id );
+    //         } else {
+    //             // No vault found to execute issue. Sleep and retry later
+    //             tracing::warn!("No vault available with issuable amount above minimum issue amount");
+    //             tracing::info!("Waiting {} seconds before checking again", config.sleeptime_no_issuable_vault);
+    //             thread::sleep(Duration::from_secs(config.sleeptime_no_issuable_vault));
+    //             continue;
+    //         };
 
-        }
+    //     }
     
-        // Emit Issue Request
-        let issue_amount = if max_issue_amount > max_issuable_amt { max_issuable_amt } else { max_issue_amount };
-        let issue = parachain.request_issue(issue_amount, &vault_id).await?;
-        tracing::info!("Issue request accepted");
-        tracing::info!("BTC address:      {:?}",issue.vault_address);
-        tracing::info!("                  {:?}",issue.vault_address.encode_str(BITCOIN_NETWORK));
+    //     // Emit Issue Request
+    //     let issue_amount = if max_issue_amount > max_issuable_amt { max_issuable_amt } else { max_issue_amount };
+    //     let issue = parachain.request_issue(issue_amount, &vault_id).await?;
+    //     tracing::info!("Issue request accepted");
+    //     tracing::info!("BTC address:      {:?}",issue.vault_address);
+    //     tracing::info!("                  {:?}",issue.vault_address.encode_str(BITCOIN_NETWORK));
         
-        tracing::info!("Issue amount:     {} {} Sat",issue.amount, config.vault_wrapped_id);
-        tracing::info!("Issue fee:        {} {} Sat",issue.fee, config.vault_wrapped_id);
+    //     tracing::info!("Issue amount:     {} {} Sat",issue.amount, config.vault_wrapped_id);
+    //     tracing::info!("Issue fee:        {} {} Sat",issue.fee, config.vault_wrapped_id);
 
-        // Send BTC transaction
-        let tx_amount = issue.amount + issue.fee;
-        let mut tx_builder = wallet.build_tx();
-        tx_builder
-            .add_recipient(issue_request_btc_address.script_pubkey(), tx_amount)
-            .enable_rbf();
-        let (mut psbt, tx_details) = tx_builder.finish()?;
-        tracing::info!("Transaction details: {:#?}", tx_details);
-        tracing::info!("Signing transaction");
-        let finalized = wallet.sign(&mut psbt, SignOptions::default())?;
-        assert!(finalized, "Tx has not been finalized");
-        // tracing::info!("Transaction Signed: {}", finalized);
-        let raw_transaction = psbt.extract_tx();
-        let txid = wallet.broadcast(&raw_transaction)?;
-        tracing::info!(
-            "Transaction sent! TXID: {txid}.\nExplorer URL: https://blockstream.info/testnet/tx/{txid}",
-            txid = txid
-        );
+    //     // Send BTC transaction
+    //     let tx_amount = issue.amount + issue.fee;
+    //     let mut tx_builder = wallet.build_tx();
+    //     tx_builder
+    //         .add_recipient(issue_request_btc_address.script_pubkey(), tx_amount)
+    //         .enable_rbf();
+    //     let (mut psbt, tx_details) = tx_builder.finish()?;
+    //     tracing::info!("Transaction details: {:#?}", tx_details);
+    //     tracing::info!("Signing transaction");
+    //     let finalized = wallet.sign(&mut psbt, SignOptions::default())?;
+    //     assert!(finalized, "Tx has not been finalized");
+    //     // tracing::info!("Transaction Signed: {}", finalized);
+    //     let raw_transaction = psbt.extract_tx();
+    //     let txid = wallet.broadcast(&raw_transaction)?;
+    //     tracing::info!(
+    //         "Transaction sent! TXID: {txid}.\nExplorer URL: https://blockstream.info/testnet/tx/{txid}",
+    //         txid = txid
+    //     );
 
-    }
+    // }
 
     Ok(())
      
