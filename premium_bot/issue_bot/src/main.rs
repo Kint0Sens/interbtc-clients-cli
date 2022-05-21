@@ -161,16 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     
     // Setup wallet
-    let external_descriptor = &ext;
-    let internal_descriptor = &int;
-    let wallet: Wallet<ElectrumBlockchain, MemoryDatabase> = Wallet::new(
-        external_descriptor,
-        Some(internal_descriptor),
-        Network::Testnet,
-        MemoryDatabase::new(),
-        ElectrumBlockchain::from(Client::new("ssl://electrum.blockstream.info:60002").unwrap()),
-    )?;
-
+    let wallet = setup_wallet(ext,int);
     // Main loop
     loop {
         // Check available btc balance

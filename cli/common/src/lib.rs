@@ -112,9 +112,9 @@ pub fn init_logger(verbose : usize) -> env_logger::Env<'static> {
 //     network
 // }
 
-pub fn setup_wallet() -> Result<Wallet<ElectrumBlockchain, MemoryDatabase>, BdkError> {
-    let external_descriptor = "wpkh(tprv8ZgxMBicQKsPctgasNzABhRCAfReohQPdu235WxXhu7yuh3by91GhqZgRGN6GEdARTEWJ2iURcjtbAub8ifnzbym5vGs4V54DwK8VL9b9oZ/84'/0'/0'/0/*)";
-    let internal_descriptor = "wpkh(tprv8ZgxMBicQKsPctgasNzABhRCAfReohQPdu235WxXhu7yuh3by91GhqZgRGN6GEdARTEWJ2iURcjtbAub8ifnzbym5vGs4V54DwK8VL9b9oZ/84'/0'/0'/1/*)";
+pub fn setup_wallet(ext: String, int: String) -> Result<Wallet<ElectrumBlockchain, MemoryDatabase>, BdkError> {
+    let external_descriptor = &ext;
+    let internal_descriptor = &int;
     Wallet::new(
         external_descriptor,
         Some(internal_descriptor),
