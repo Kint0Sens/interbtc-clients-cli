@@ -4,19 +4,21 @@ use clap::Parser;
 use git_version::git_version;
 use bitcoin::PartialAddress;
 use runtime::{
-        CollateralBalancesPallet,
-        VaultRegistryPallet,
-        IssuePallet,
-        InterBtcSigner,
-        Ss58Codec,
-        PrettyPrint,        
-        UtilFuncs,
-        VaultId,
-        VaultStatus,
-        CurrencyInfo,
-        CurrencyIdExt,
-        parse_wrapped_currency,
-        };
+    CollateralBalancesPallet,
+    VaultRegistryPallet,
+    IssuePallet,
+    InterBtcSigner,
+    Ss58Codec,
+    PrettyPrint,        
+    UtilFuncs,
+    VaultId,
+    VaultStatus,
+    AccountId,
+    CurrencyInfo,
+    CurrencyIdExt,
+    parse_wrapped_currency,
+    parse_collateral_currency,
+    };
 use bdk::{
     bitcoin::Address, 
     bitcoin::Network, 
@@ -47,9 +49,9 @@ struct Cli {
     /// Return all logs
     /// Overridden by RUST_LOG env variable
     #[clap(short, long, parse(from_occurrences))]
-   verbose: usize,
+    verbose: usize,
 
-     /// Keyring / keyfile options containng the user's info
+    /// Keyring / keyfile options containng the user's info
     #[clap(flatten)]
     account_info: runtime::cli::ProviderUserOpts,
 
@@ -65,6 +67,11 @@ struct Cli {
 
 #[derive(Parser, Clone)]
 pub struct ToolConfig {
+    /// Vault to issue to - account
+    /// If not specified, an eligible vault is selected
+    #[clap(long, default_value = "")]
+    vault_account_id: String,
+
     /// Max Amount to issue, in satoshis, 
     /// must be greater than Bridge Fee + BTC Network Fee + BTC Dust Limit 
     #[clap(long, validator = amount_gt_minimal, default_value = "999999999999999999999")]
@@ -89,43 +96,53 @@ pub struct ToolConfig {
     sleeptime_not_enough_btc: u64,
 
     /// Collateral
-     #[clap(long, default_value = "KSM")]  // Make network dependent default
-     chain_collateral_id: String,
+    #[clap(long, default_value = "KSM")]  // Make network dependent default
+    chain_collateral_id: String,
  
-     /// Wrapped
-     #[clap(long, default_value = "KBTC")] // Make network dependent default
-     chain_wrapped_id: String,
+    /// Wrapped
+    #[clap(long, default_value = "KBTC")] // Make network dependent default
+    chain_wrapped_id: String,
  }
 
 #[tokio::main]
 #[allow(unreachable_code)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli: Cli = Cli::parse();
+    // env_logger::init_from_env(init_logger(cli.verbose));
     env_logger::init_from_env(init_logger(cli.verbose));
 
     let config = cli.config;
 
     //Main loop
     // Check available btc balance
-    // Identify Vault with issuable capacity
+    // Identify Vault with issuable capacity (or use vault entered in args)
     // Request Issue
     // Pay Issue
     // Report balances
     // repeat
 
-      // User keys
+    // User keys
     let (key_pair, _) = cli.account_info.get_key_pair()?;
+    let (ext,int,_) = cli.account_info.get_btc_keys()?;
     let signer = InterBtcSigner::new(key_pair);
     let signer_account_id = signer.account_id().clone();
-
+    let collateral_id  = parse_collateral_currency(&config.chain_collateral_id).unwrap();
     let wrapped_id  = parse_wrapped_currency(&config.chain_wrapped_id).unwrap();
+
+    let forced_vault_id : VaultId = VaultId::new(AccountId::from_str(&config.vault_account_id).unwrap(), collateral_id, wrapped_id);
+
+    let use_forced_vault = if config.vault_account_id == "" { 
+        false 
+    } else {
+        true 
+    };
 
     // Connect to the parachain with the user keys
     let parachain_config = cli.parachain;
     let (shutdown_tx, _) = tokio::sync::broadcast::channel(16);
-    tracing::trace!(TEXT_CONNECT_ATTEMPT);
+    tracing::trace!("{}",TEXT_CONNECT_ATTEMPT);
     let parachain = parachain_config.try_connect(signer.clone(), shutdown_tx.clone()).await?;
-    tracing::info!(TEXT_CONNECTED);
+    tracing::info!("{}",TEXT_CONNECTED);
     let native_id = parachain.get_native_currency_id();
 
 
@@ -137,16 +154,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
     let mut balance_native = parachain.get_free_balance_for_id(signer_account_id.clone(),native_id).await?;
     tracing::info!("Balances(sat/planck):  {}/{} {}/{:?}", 
-    balance_wrapped,
-    balance_native,
-    config.chain_wrapped_id,
-    native_id
-);
-
+        balance_wrapped,
+        balance_native,
+        config.chain_wrapped_id,
+        native_id
+    );
     
     // Setup wallet
-    let external_descriptor = "wpkh(tprv8ZgxMBicQKsPctgasNzABhRCAfReohQPdu235WxXhu7yuh3by91GhqZgRGN6GEdARTEWJ2iURcjtbAub8ifnzbym5vGs4V54DwK8VL9b9oZ/84'/0'/0'/0/*)";
-    let internal_descriptor = "wpkh(tprv8ZgxMBicQKsPctgasNzABhRCAfReohQPdu235WxXhu7yuh3by91GhqZgRGN6GEdARTEWJ2iURcjtbAub8ifnzbym5vGs4V54DwK8VL9b9oZ/84'/0'/0'/1/*)";
+    let external_descriptor = &ext;
+    let internal_descriptor = &int;
     let wallet: Wallet<ElectrumBlockchain, MemoryDatabase> = Wallet::new(
         external_descriptor,
         Some(internal_descriptor),
@@ -174,42 +190,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Get eligible vaults
         // Select one with issueable amount > max_issue_amount is found
         // else take the one with greatest issuable amt
-        let vaults : Vec<_> = parachain.get_all_vaults().await?;
         let mut max_issuable_amt = 0; 
-        let mut index : usize = 0;
-        let mut vault_index : usize = 0;
         let issue_vault : VaultId;
-        for vault in vaults.iter() {
-            match vault.status {
-                VaultStatus::Active(active) => {
-                    if active == false { // Vault set to inactive, does not accept issue requests
-                        continue; 
-                    };
-                    let loop_issuable_amt: u128 =  parachain.get_issuable_tokens_from_vault(vault.id.clone()).await?;
-                    if max_issuable_amt <= loop_issuable_amt {
-                        max_issuable_amt = loop_issuable_amt;
-                        vault_index = index;
-                    }; 
-                                    
-                    }
-                _ => {},
-            };
-            index = index + 1;
-        };
-        if max_issuable_amt > config.min_issue_amount {
-            issue_vault = vaults[vault_index].id.clone();
-            tracing::info!("Selected vault {} with issuable amount of {} {}",
-                            issue_vault.account_id.pretty_print(),
-                            max_issuable_amt,
-                            config.chain_wrapped_id );
+        if use_forced_vault == true {
+            issue_vault = forced_vault_id.clone();
+            max_issuable_amt = parachain.get_issuable_tokens_from_vault(issue_vault.clone()).await?;
         } else {
+            let vaults : Vec<_> = parachain.get_all_vaults().await?;
+            let mut index : usize = 0;
+            let mut vault_index : usize = 0;
+            for vault in vaults.iter() {
+                match vault.status {
+                    VaultStatus::Active(active) => {
+                        if active == false { // Vault set to inactive, does not accept issue requests
+                            continue; 
+                        };
+                        let loop_issuable_amt: u128 =  parachain.get_issuable_tokens_from_vault(vault.id.clone()).await?;
+                        if max_issuable_amt <= loop_issuable_amt {
+                            max_issuable_amt = loop_issuable_amt;
+                            vault_index = index;
+                        }; 
+                                        
+                        }
+                    _ => {},
+                };
+                index = index + 1;
+            };
+            issue_vault = vaults[vault_index].id.clone();
+            if max_issuable_amt > config.min_issue_amount {
+                tracing::info!("Selected vault {} with issuable amount of {} {}",
+                                issue_vault.account_id.pretty_print(),
+                                max_issuable_amt,
+                                config.chain_wrapped_id );
+            };
+        };    
+        if max_issuable_amt < config.min_issue_amount {
             // No vault found to execute issue. Sleep and retry later
             tracing::warn!("No vault available with issuable amount above minimum issue amount");
             tracing::info!("Waiting {} seconds before checking again", config.sleeptime_no_issuable_vault);
             thread::sleep(Duration::from_secs(config.sleeptime_no_issuable_vault));
             continue;
         };
+
         // Emit Issue Request
+        tracing::trace!("Sending issue request to parachain");
         let issue_amount = if config.max_issue_amount > max_issuable_amt { max_issuable_amt } else { config.max_issue_amount };
         let issue = parachain.request_issue(issue_amount, &issue_vault).await?;
         tracing::info!("Issue request accepted");

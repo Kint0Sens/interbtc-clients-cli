@@ -13,15 +13,12 @@ cargo build --release --features parachain-metadata-testnet
  (testnet2022)
 
 ### Run
-Run the interBTC issue pay cli client:
+To run the interBTC issue_bot:
 
---vault-account-id points to the vault where the issue should occur
-
-./target/release/issue  \
---keyfile ~/.mytestvault/keyfile.json  \
---keyname interlaymaincustomeraccount  \
+./target/release/issue_bot  \
 --btc-parachain-url 'wss://api-testnet.interlay.io:443/parachain' \
---vault-account-id 5EqTVHyXde3pEck9cWKnuUkrDLtkHn3Bg6zRTHQEik1pYMbv 
+--max-issue-amount 2010
+--verbose
 
 ./target/debug/issue  \
 --keyfile ~/.mytestvault/keyfile.json  \

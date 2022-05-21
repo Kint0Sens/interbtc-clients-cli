@@ -5,9 +5,12 @@ use git_version::git_version;
 use common::*;
 use std::thread;
 use std::time::Duration;
+use module_oracle_rpc_runtime_api::BalanceWrapper;
 
 use runtime::{
         VaultRegistryPallet,
+        VaultId,
+        VaultStatus,
         RedeemPallet,
         CollateralBalancesPallet,
         InterBtcSigner,
@@ -16,6 +19,7 @@ use runtime::{
         Ss58Codec,
         CurrencyIdExt,
         CurrencyInfo,
+        InterBtcParachain,
         parse_collateral_currency,
         parse_wrapped_currency,
         };
@@ -34,6 +38,12 @@ struct Cli {
      /// Overridden by RUST_LOG env variable
      #[clap(short, long, parse(from_occurrences))]
     verbose: usize,
+
+    /// For testing consider all active vaults 
+    /// as premium vaults.
+    /// Useful to test tool when no premium redeem vaults exist
+    #[clap(long, parse(from_occurrences))]
+    treat_all_vaults_as_premium: usize,
 
     /// Keyring / keyfile options containng the user's info
     #[clap(flatten)]
@@ -104,9 +114,9 @@ async fn main() -> Result<(), Error> {
     // Connect to the parachain with the user keys
     let (shutdown_tx, _) = tokio::sync::broadcast::channel(16);
     let parachain_config = cli.parachain;
-    tracing::trace!("TEXT_CONNECT_ATTEMPT");
+    tracing::trace!("{}",TEXT_CONNECT_ATTEMPT);
     let parachain = parachain_config.try_connect(signer.clone(), shutdown_tx.clone()).await?;
-    tracing::info!("TEXT_CONNECTED");
+    tracing::info!("{}",TEXT_CONNECTED);
     let native_id = parachain.get_native_currency_id();
     // let signer_account_id = parachain.get_account_id();
     let mut balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
@@ -146,8 +156,9 @@ async fn main() -> Result<(), Error> {
             thread::sleep(Duration::from_secs(config.sleeptime_not_enough_balance));
             continue;
         }
-        // Is there some premium redeem available on a vault
-        let result = parachain.get_premium_redeem_vaults().await;
+        // Are there some vaults with premium redeem available?
+        // let result = parachain.get_premium_redeem_vaults().await;
+        let result = get_premium_redeem_vaults_or_all_active(parachain.clone(), cli.treat_all_vaults_as_premium).await;
         match &result {
             Ok(premium_vaults) => {
                 if premium_vaults.len() == 0 {
@@ -228,4 +239,23 @@ async fn main() -> Result<(), Error> {
     }
     Ok(())  
 }
-
+// treat_all_vaults_as_premium
+async fn get_premium_redeem_vaults_or_all_active(parachain: InterBtcParachain, treat_all_as_premium : usize) -> Result<Vec<(VaultId,BalanceWrapper<u128>)>,runtime::Error> {
+    if treat_all_as_premium == 0 {
+        parachain.get_premium_redeem_vaults().await
+    } else {
+        let vaults = parachain.get_all_vaults().await?;
+        let mut result : Vec<(VaultId,BalanceWrapper<u128>)> = Vec::new();
+        for vault in vaults.iter() {
+            match vault.status {
+                VaultStatus::Active(active) => { 
+                    if active == true {
+                        result.push((vault.id.clone(), BalanceWrapper { amount: vault.issued_tokens }))
+                    }
+                },
+                _ => {}
+            };
+        };
+        Ok(result)
+    }
+}

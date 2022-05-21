@@ -4,8 +4,10 @@ use crate::{
     InterBtcParachain, InterBtcSigner,
 };
 use clap::Parser;
-use sp_keyring::AccountKeyring;
-use std::{collections::HashMap, num::ParseIntError, str::FromStr, time::Duration};
+// use sp_keyring::AccountKeyring;
+use std::{collections::HashMap, num::ParseIntError,
+    //  str::FromStr,
+      time::Duration};
 use subxt::sp_core::{sr25519::Pair, Pair as _};
 
 #[derive(Parser, Debug, Clone)]
@@ -30,9 +32,21 @@ pub struct ProviderUserOpts {
     #[clap(long, requires = "keyname", default_value = "./keyfile.json")]  // "~/keyfile.json" does not translate to /home/user/keyfile.json
     pub keyfile: String,
 
+    /// Path to the json file containing external / internal descriptors in a map.
+    /// Valid content of this file is e.g.
+    /// `{ "MyBTCWallet1": ["<external descriptor>","<internal descriptor>""],
+    ///   "MyBTCWallet2": ["<external descriptor>",<internal descriptor>] }`.
+    #[clap(long, requires = "keyname_btc", default_value = "./keyfile_btc.json")]  // "~/keyfile.json" does not translate to /home/user/keyfile.json
+    pub keyfile_btc: String,
+
+
     /// The name of the account from the keyfile to use.
     #[clap(long, requires = "keyfile", default_value = "keyname")]
     pub keyname: String,
+
+    /// The name of the btc descriptors from the keyfile_btc to use.
+    #[clap(long, requires = "keyfile_btc", default_value = "keyname_btc")]
+    pub keyname_btc: String,
 }
 
 impl ProviderUserOpts {
@@ -53,6 +67,14 @@ impl ProviderUserOpts {
     //     Ok((pair, user_name))
     // }
 
+    pub fn get_btc_keys(&self) -> Result<(String,String, String),Error> {
+        // load btc credentials
+        // let keyname_btc = self.keyname_btc.clone();
+        let (ext,int) =
+         get_btc_credentials_from_file(self.keyfile_btc.as_ref(), self.keyname_btc.as_ref())?;
+
+        Ok((ext,int,self.keyname_btc.clone()))
+    }
     pub fn get_key_pair(&self) -> Result<(Pair, String), Error> {
         // load parachain credentials
         let keyname = self.keyname.clone();
@@ -62,8 +84,15 @@ impl ProviderUserOpts {
          let user_name = keyname;
         Ok((pair, user_name))
     }
-//CLI end
 }
+fn get_btc_credentials_from_file(file_path: &str, keyname_btc: &str) -> Result<(String, String), KeyLoadingError> {
+    let file = std::fs::File::open(file_path)?;
+    let reader = std::io::BufReader::new(file);
+    let map : HashMap<String, Vec<String>> = serde_json::from_reader(reader)?;
+    let desc_pair = map.get(keyname_btc).ok_or(KeyLoadingError::KeyNotFound)?;
+    Ok((desc_pair[0].clone(),desc_pair[1].clone()))
+}
+//CLI end
 
 /// Loads the credentials for the given user from the keyfile
 ///
@@ -80,9 +109,8 @@ fn get_credentials_from_file(file_path: &str, keyname: &str) -> Result<Pair, Key
     Ok(pair)
 }
 
-pub fn parse_account_keyring(src: &str) -> Result<AccountKeyring, Error> {
-    AccountKeyring::from_str(src).map_err(|_| Error::KeyringAccountParsingError)
-}
+
+
 
 pub fn parse_duration_ms(src: &str) -> Result<Duration, ParseIntError> {
     Ok(Duration::from_millis(src.parse::<u64>()?))
