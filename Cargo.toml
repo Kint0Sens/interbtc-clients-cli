@@ -16,5 +16,5 @@ members = [
   # "cli/issue_pay",
   "cli/common",
   "premium_bot/redeem_bot",
-  "premium_bot/pay_bot",
+  "premium_bot/issue_bot",
 ]

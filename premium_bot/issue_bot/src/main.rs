@@ -123,9 +123,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect to the parachain with the user keys
     let parachain_config = cli.parachain;
     let (shutdown_tx, _) = tokio::sync::broadcast::channel(16);
-    tracing::trace!("TEXT_CONNECT_ATTEMPT");
+    tracing::trace!(TEXT_CONNECT_ATTEMPT);
     let parachain = parachain_config.try_connect(signer.clone(), shutdown_tx.clone()).await?;
-    tracing::info!("TEXT_CONNECTED");
+    tracing::info!(TEXT_CONNECTED);
     let native_id = parachain.get_native_currency_id();
 
 
