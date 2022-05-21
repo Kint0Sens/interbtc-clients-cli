@@ -21,12 +21,7 @@ use runtime::{
     };
 use bdk::{
     bitcoin::Address, 
-    bitcoin::Network, 
     blockchain::noop_progress, 
-    blockchain::ElectrumBlockchain,
-    database::MemoryDatabase, 
-    electrum_client::Client, 
-    Wallet, 
     SignOptions,
 };
 use std::thread;
@@ -161,7 +156,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     
     // Setup wallet
-    let wallet = setup_wallet(ext,int);
+    let wallet = setup_wallet(ext,int)?;
     // Main loop
     loop {
         // Check available btc balance
