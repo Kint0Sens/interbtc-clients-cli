@@ -1,6 +1,8 @@
 use std::env;
 use clap::Parser;
-
+pub use primitives::{
+    TokenSymbol
+};
 use git_version::git_version;
 use common::*;
 use std::thread;
@@ -65,10 +67,10 @@ pub struct ToolConfig {
     #[clap(long, validator = amount_gt_minimal, default_value = "999999999999999999999")]
     max_redeem_amount: u128,
 
-    /// Minimum wallet amount of wrapped token in sat, 
+    /// Minimum wallet balance amount of wrapped token in sat, 
     /// bot will not trigger redeem when balance is below this amount
     #[clap(long, default_value = "2000")]
-    min_wrapped: u128,
+    min_wrapped_balance: u128,
 
     /// Sleep time before checking balance again
     ///  when not enough wrapped balance
@@ -79,6 +81,10 @@ pub struct ToolConfig {
     /// when no premium redeem vault available
     #[clap(long, default_value = "60")]
     sleeptime_no_premium_vault: u64,
+
+    /// Sleep time after each succesful redeem loop
+    #[clap(long, default_value = "10")]
+    sleeptime_main_loop: u64,
 
     /// Beneficiary Btc Wallet address. In string format
     #[clap(long)]
@@ -129,7 +135,7 @@ async fn main() -> Result<(), Error> {
     tracing::info!("BTC Address:           {}",config.btc_address);
     tracing::info!("BTC Address:           {:?}",btc_address);
     tracing::info!("Max Redeem amount:     {} {} Sat",config.max_redeem_amount, config.chain_wrapped_id);
-    tracing::info!("Min Wrapped balance:   {} {} Sat",config.max_redeem_amount, config.chain_wrapped_id);
+    tracing::info!("Min Wrapped balance:   {} {} Sat",config.min_wrapped_balance, config.chain_wrapped_id);
 
     tracing::info!("Balances(sat/planck):  {}/{}/{} {}/{}/{:?}", 
         balance_wrapped,
@@ -137,7 +143,7 @@ async fn main() -> Result<(), Error> {
         balance_native,
         config.chain_wrapped_id,
         config.chain_collateral_id,
-        native_id
+        TokenSymbol::KINT
     );
     tracing::info!("{}", native_id.inner().name().to_lowercase());
 
@@ -150,8 +156,8 @@ async fn main() -> Result<(), Error> {
 
     loop {
         // Is there enough wrapped balance to proceed?
-        if balance_wrapped < config.min_wrapped {
-            tracing::warn!("{} balance lower than minimum balance of {}  Sat", config.chain_wrapped_id, config.min_wrapped);
+        if balance_wrapped < config.min_wrapped_balance {
+            tracing::warn!("{} balance lower than minimum balance of {}  Sat", config.chain_wrapped_id, config.min_wrapped_balance);
             tracing::info!("Waiting {} seconds before checking again", config.sleeptime_not_enough_balance);
             thread::sleep(Duration::from_secs(config.sleeptime_not_enough_balance));
             continue;
@@ -203,6 +209,9 @@ async fn main() -> Result<(), Error> {
         } else {
             premium_amt.amount
         };
+        tracing::info!("Redeem request amount  {} {} Sat",
+            redeem_amount,
+            config.chain_wrapped_id);
         let _redeem_id = parachain.request_redeem(redeem_amount, btc_address, &target_vault_id).await?;
         tracing::info!("Parachain confirms redeem request to vault {} of {} {} Sat to BTC address {}",
                 target_vault_id.account_id.to_ss58check(),
@@ -221,7 +230,7 @@ async fn main() -> Result<(), Error> {
             balance_native_new,
             config.chain_wrapped_id,
             config.chain_collateral_id,
-            native_id
+            TokenSymbol::KINT
         );
         tracing::info!("{}", native_id.inner().name().to_lowercase());
         tracing::info!("Deltas(sat/planck):  {}/{}/{} {}/{}/{:?}", 
@@ -230,16 +239,20 @@ async fn main() -> Result<(), Error> {
             balance_native_new - balance_native,
             config.chain_wrapped_id,
             config.chain_collateral_id,
-            native_id
+            TokenSymbol::KINT
         );
         balance_wrapped = balance_wrapped_new;
         balance_collateral = balance_collateral_new;
         balance_native = balance_native_new;
 
+        tracing::info!("Waiting {} seconds before next loop iteration", config.sleeptime_main_loop);
+        thread::sleep(Duration::from_secs(config.sleeptime_main_loop));
+
     }
     Ok(())  
 }
-// treat_all_vaults_as_premium
+
+
 async fn get_premium_redeem_vaults_or_all_active(parachain: InterBtcParachain, treat_all_as_premium : usize) -> Result<Vec<(VaultId,BalanceWrapper<u128>)>,runtime::Error> {
     if treat_all_as_premium == 0 {
         parachain.get_premium_redeem_vaults().await

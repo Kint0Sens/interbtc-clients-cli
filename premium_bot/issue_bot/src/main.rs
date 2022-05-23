@@ -90,6 +90,10 @@ pub struct ToolConfig {
     #[clap(long, default_value = "15")]
     sleeptime_not_enough_btc: u64,
 
+    /// Sleep time after each succesful redeem loop
+    #[clap(long, default_value = "10")]
+    sleeptime_main_loop: u64,
+
     /// Collateral
     #[clap(long, default_value = "KSM")]  // Make network dependent default
     chain_collateral_id: String,
@@ -126,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
     let use_forced_vault = if config.vault_account_id == "" { 
-        tracing::info!("Using specified vault");
+        tracing::info!("User specified vault: {}",config.vault_account_id);
         false 
     } else {
         tracing::info!("Automatic selection of vault");
@@ -197,19 +201,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             for vault in vaults.iter() {
                 match vault.status {
                     VaultStatus::Active(active) => {
+// /                        tracing::trace!("{} Vault {} active: {}",index,vault.clone().id.account_id.pretty_print(), active);
+                       
                         if active == false { // Vault set to inactive, does not accept issue requests
+                            index = index + 1;
                             continue; 
                         };
                         let loop_issuable_amt: u128 =  parachain.get_issuable_tokens_from_vault(vault.id.clone()).await?;
                         if max_issuable_amt <= loop_issuable_amt {
                             max_issuable_amt = loop_issuable_amt;
                             vault_index = index;
+                            // tracing::trace!("{} Max  {} Loop {}",index,max_issuable_amt,loop_issuable_amt);
                         }; 
+                        index = index + 1;
                                         
                         }
                     _ => {},
                 };
-                index = index + 1;
             };
             issue_vault = vaults[vault_index].id.clone();
             if max_issuable_amt > config.min_issue_amount {
@@ -278,7 +286,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         balance_wrapped = balance_wrapped_new;
         balance_native = balance_native_new;
-        
+
+        tracing::info!("Waiting {} seconds before next loop iteration", config.sleeptime_main_loop);
+        thread::sleep(Duration::from_secs(config.sleeptime_main_loop));
+
     };
     Ok(())  
 }

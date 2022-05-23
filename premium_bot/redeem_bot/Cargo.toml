@@ -24,6 +24,12 @@ git = "https://github.com/interlay/interbtc"
 rev = "f1ed5205c29934170b0674e6b60a847028b9735e"
 package = "module-oracle-rpc-runtime-api"
 
+[dependencies.primitives]
+git = "https://github.com/interlay/interbtc"
+rev = "f1ed5205c29934170b0674e6b60a847028b9735e"
+package = "interbtc-primitives"
+
+
 [dev-dependencies]
 
 # Workspace dependencies

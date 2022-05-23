@@ -6526,6 +6526,7 @@ dependencies = [
  "common",
  "env_logger 0.9.0",
  "git-version",
+ "interbtc-primitives",
  "log 0.4.17",
  "module-oracle-rpc-runtime-api",
  "runtime",

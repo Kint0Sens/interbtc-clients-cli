@@ -41,16 +41,20 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "standalone-metadata")] {
         pub const BITCOIN_NETWORK : bitcoin::Network = Network::Testnet;
         pub const ELECTRUM : &str = "ssl://electrum.blockstream.info:60002";
-    } else if #[cfg(feature = "parachain-metadata-kintsugi")] {
+        pub const TEXT_CONNECT_ATTEMPT : &str = "Attempting connection to Standalone parachain";
+        pub const TEXT_CONNECTED : &str = "Connected to Standalone parachain";
+            } else if #[cfg(feature = "parachain-metadata-kintsugi")] {
         pub const BITCOIN_NETWORK : bitcoin::Network = Network::Bitcoin;
         pub const ELECTRUM : &str = "ssl://electrum.blockstream.info:50002";
+        pub const TEXT_CONNECT_ATTEMPT : &str = "Attempting connection to Kintsugi parachain";
+        pub const TEXT_CONNECTED : &str = "Connected to Kintsugi parachain";
     } else if #[cfg(feature = "parachain-metadata-testnet")] {
         pub const BITCOIN_NETWORK : bitcoin::Network = Network::Testnet;
         pub const ELECTRUM : &str = "ssl://electrum.blockstream.info:60002";
+        pub const TEXT_CONNECT_ATTEMPT : &str = "Attempting connection to Testnet parachain";
+        pub const TEXT_CONNECTED : &str = "Connected to Testnet parachain";
     }
 }
-pub const TEXT_CONNECT_ATTEMPT : &str = "Attempting connection to parachain";
-pub const TEXT_CONNECTED : &str = "Connected to Parachain";
 
 // #[allow(unused_assignments)]
 // pub fn native_currency() -> String {
