@@ -64,7 +64,7 @@ struct Cli {
 pub struct ToolConfig {
     /// Vault to issue to - account
     /// If not specified, an eligible vault is selected
-    #[clap(long, default_value = "")]
+    #[clap(long, default_value = "")] 
     vault_account_id: String,
 
     /// Max Amount to issue, in satoshis, 
@@ -124,14 +124,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let collateral_id  = parse_collateral_currency(&config.chain_collateral_id).unwrap();
     let wrapped_id  = parse_wrapped_currency(&config.chain_wrapped_id).unwrap();
 
-    let forced_vault_id : VaultId = VaultId::new(AccountId::from_str(&config.vault_account_id).unwrap(), collateral_id, wrapped_id);
 
     let use_forced_vault = if config.vault_account_id == "" { 
+        tracing::info!("Using specified vault");
         false 
     } else {
+        tracing::info!("Automatic selection of vault");
         true 
     };
-
+    
+    let some_forced_vault_id : Option<VaultId> =  match use_forced_vault {
+        true => {
+            Some(VaultId::new(AccountId::from_str(&config.vault_account_id).unwrap(), collateral_id, wrapped_id ))
+        },
+        false => {
+            None
+        },
+    };
     // Connect to the parachain with the user keys
     let parachain_config = cli.parachain;
     let (shutdown_tx, _) = tokio::sync::broadcast::channel(16);
@@ -179,7 +188,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut max_issuable_amt = 0; 
         let issue_vault : VaultId;
         if use_forced_vault == true {
-            issue_vault = forced_vault_id.clone();
+            issue_vault = some_forced_vault_id.clone().unwrap();
             max_issuable_amt = parachain.get_issuable_tokens_from_vault(issue_vault.clone()).await?;
         } else {
             let vaults : Vec<_> = parachain.get_all_vaults().await?;

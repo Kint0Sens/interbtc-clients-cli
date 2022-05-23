@@ -40,11 +40,13 @@ use runtime::{
 cfg_if::cfg_if! {
     if #[cfg(feature = "standalone-metadata")] {
         pub const BITCOIN_NETWORK : bitcoin::Network = Network::Testnet;
+        pub const ELECTRUM : &str = "ssl://electrum.blockstream.info:60002";
     } else if #[cfg(feature = "parachain-metadata-kintsugi")] {
         pub const BITCOIN_NETWORK : bitcoin::Network = Network::Bitcoin;
+        pub const ELECTRUM : &str = "ssl://electrum.blockstream.info:50002";
     } else if #[cfg(feature = "parachain-metadata-testnet")] {
         pub const BITCOIN_NETWORK : bitcoin::Network = Network::Testnet;
-
+        pub const ELECTRUM : &str = "ssl://electrum.blockstream.info:60002";
     }
 }
 pub const TEXT_CONNECT_ATTEMPT : &str = "Attempting connection to parachain";
@@ -120,7 +122,7 @@ pub fn setup_wallet(ext: String, int: String) -> Result<Wallet<ElectrumBlockchai
         Some(internal_descriptor),
         BITCOIN_NETWORK,
         MemoryDatabase::new(),
-        ElectrumBlockchain::from(Client::new("ssl://electrum.blockstream.info:60002").unwrap()),
+        ElectrumBlockchain::from(Client::new(ELECTRUM).unwrap()),
     )
 }
 
