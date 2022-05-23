@@ -129,6 +129,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wrapped_id  = parse_wrapped_currency(&config.chain_wrapped_id).unwrap();
 
 
+   // Connect to the parachain with the user keys
+    let parachain_config = cli.parachain;
+    let (shutdown_tx, _) = tokio::sync::broadcast::channel(16);
+    tracing::trace!("{}",TEXT_CONNECT_ATTEMPT);
+    let parachain = parachain_config.try_connect(signer.clone(), shutdown_tx.clone()).await?;
+    tracing::info!("{}",TEXT_CONNECTED);
+    let native_id = parachain.get_native_currency_id();
+
+    separator();
+
     let use_forced_vault = if config.vault_account_id == "" { 
         tracing::info!("Automatic selection of vault");
         false 
@@ -145,15 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             None
         },
     };
-    // Connect to the parachain with the user keys
-    let parachain_config = cli.parachain;
-    let (shutdown_tx, _) = tokio::sync::broadcast::channel(16);
-    tracing::trace!("{}",TEXT_CONNECT_ATTEMPT);
-    let parachain = parachain_config.try_connect(signer.clone(), shutdown_tx.clone()).await?;
-    tracing::info!("{}",TEXT_CONNECTED);
-    let native_id = parachain.get_native_currency_id();
-
-
+  
     tracing::info!("Signer:           {}",signer_account_id.to_ss58check());
     tracing::info!("Max Issue amount:        {} {} Sat",config.max_issue_amount, config.chain_wrapped_id);
     tracing::info!("Min Issue amount:        {} {} Sat",config.min_issue_amount, config.chain_wrapped_id);
@@ -167,7 +169,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.chain_wrapped_id,
         get_currency_str(native_id.inner())
     );
-    
+
+    separator();
+
     // Setup wallet
     let wallet = setup_wallet(ext,int)?;
     // Main loop

@@ -57,6 +57,8 @@ cfg_if::cfg_if! {
     }
 }
 
+pub const TEXT_SEPARATOR : &str = "-------------------------------";
+
 pub fn get_currency_str(token_symbol : TokenSymbol) -> String {
     match token_symbol {
         TokenSymbol::KINT => { "KINT".to_string() },
@@ -179,4 +181,3 @@ pub fn amount_gt_minimal(s: &str) -> Result<(), String> {
         )),
     })
 }
-
