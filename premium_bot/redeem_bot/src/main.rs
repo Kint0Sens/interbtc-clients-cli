@@ -1,8 +1,6 @@
 use std::env;
 use clap::Parser;
-pub use primitives::{
-    TokenSymbol
-};
+
 use git_version::git_version;
 use common::*;
 use std::thread;
@@ -143,7 +141,7 @@ async fn main() -> Result<(), Error> {
         balance_native,
         config.chain_wrapped_id,
         config.chain_collateral_id,
-        TokenSymbol::KINT
+        get_currency_str(native_id.inner())
     );
     tracing::info!("{}", native_id.inner().name().to_lowercase());
 
@@ -230,7 +228,7 @@ async fn main() -> Result<(), Error> {
             balance_native_new,
             config.chain_wrapped_id,
             config.chain_collateral_id,
-            TokenSymbol::KINT
+            get_currency_str(native_id.inner())
         );
         tracing::info!("{}", native_id.inner().name().to_lowercase());
         tracing::info!("Deltas(sat/planck):  {}/{}/{} {}/{}/{:?}", 
@@ -239,7 +237,7 @@ async fn main() -> Result<(), Error> {
             balance_native_new - balance_native,
             config.chain_wrapped_id,
             config.chain_collateral_id,
-            TokenSymbol::KINT
+            get_currency_str(native_id.inner())
         );
         balance_wrapped = balance_wrapped_new;
         balance_collateral = balance_collateral_new;

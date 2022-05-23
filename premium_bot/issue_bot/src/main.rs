@@ -130,10 +130,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
     let use_forced_vault = if config.vault_account_id == "" { 
-        tracing::info!("User specified vault: {}",config.vault_account_id);
+        tracing::info!("Automatic selection of vault");
         false 
     } else {
-        tracing::info!("Automatic selection of vault");
+        tracing::info!("User specified vault: {}",config.vault_account_id);
         true 
     };
     
@@ -161,11 +161,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
     let mut balance_native = parachain.get_free_balance_for_id(signer_account_id.clone(),native_id).await?;
-    tracing::info!("Balances(sat/planck):  {}/{} {}/{:?}", 
+    tracing::info!("Balances(sat/planck):  {}/{} {}/{}", 
         balance_wrapped,
         balance_native,
         config.chain_wrapped_id,
-        native_id
+        get_currency_str(native_id.inner())
     );
     
     // Setup wallet

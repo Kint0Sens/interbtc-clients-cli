@@ -5,6 +5,7 @@ use pad::{PadStr, Alignment};
 // use clap::Parser;
 // use std::str::FromStr;
 // use std::ops::RangeInclusive;
+pub use primitives::TokenSymbol;
 use std::path::Path;
 use std::ffi::OsStr;
 use std::ops::RangeInclusive;
@@ -55,6 +56,17 @@ cfg_if::cfg_if! {
         pub const TEXT_CONNECTED : &str = "Connected to Testnet parachain";
     }
 }
+
+pub fn get_currency_str(token_symbol : TokenSymbol) -> String {
+    match token_symbol {
+        TokenSymbol::KINT => { "KINT".to_string() },
+        TokenSymbol::DOT => { "DOT".to_string() },
+        TokenSymbol::IBTC => { "KINT".to_string() },
+        TokenSymbol::INTR => { "INTR".to_string() },
+        TokenSymbol::KBTC => { "KBTC".to_string() },
+        TokenSymbol::KSM => { "KSM".to_string() },
+    }
+} 
 
 // #[allow(unused_assignments)]
 // pub fn native_currency() -> String {
