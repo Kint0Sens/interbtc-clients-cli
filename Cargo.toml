@@ -6,5 +6,15 @@ members = [
   "vault",
   "bitcoin",
   "faucet",
-  "service"
+  "service",
+  # "cli/explore",
+  # "cli/redeem",
+  # "cli/burn",
+  # "cli/transfer",
+  # "cli/issue",
+  # "cli/issue_request",
+  # "cli/issue_pay",
+  "cli/common",
+  "premium_bot/redeem_bot",
+  "premium_bot/issue_bot",
 ]
