@@ -137,8 +137,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("{}",TEXT_CONNECTED);
     let native_id = parachain.get_native_currency_id();
 
-    separator();
-
+    tracing::info!("{}",TEXT_SEPARATOR);
+    
     let use_forced_vault = if config.vault_account_id == "" { 
         tracing::info!("Automatic selection of vault");
         false 
@@ -170,7 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         get_currency_str(native_id.inner())
     );
 
-    separator();
+    tracing::info!("{}",TEXT_SEPARATOR);
 
     // Setup wallet
     let wallet = setup_wallet(ext,int)?;
@@ -282,7 +282,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             native_id
         );
         tracing::info!("{}", native_id.inner().name().to_lowercase());
-        tracing::info!("Deltas(sat/planck):  {}/{} {}/{:?}", 
+        tracing::info!("Balance deltas(sat/planck):  {}/{} {}/{:?}", 
             balance_wrapped_new - balance_wrapped,
             balance_native_new - balance_native,
             config.chain_wrapped_id,
@@ -293,6 +293,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         tracing::info!("Waiting {} seconds before next loop iteration", config.sleeptime_main_loop);
         thread::sleep(Duration::from_secs(config.sleeptime_main_loop));
+        tracing::info!("{}",TEXT_SEPARATOR);
 
     };
     Ok(())  

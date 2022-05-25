@@ -2,6 +2,7 @@
 
 Redeem command line tool.
 
+
 ## Todos
 * Determine dust dynammically istead of requiring amount to be 2000+ sat
 
