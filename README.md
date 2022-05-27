@@ -1,92 +1,60 @@
-<p align="center">
-  <a href="https://github.com/interlay/interbtc-clients">
-    <img alt="interBTC Clients" src="media/banner.jpg">
-  </a>
-  <h2 align="center">interBTC Clients</h2>
+# Premium BOT
+## by Kint0Sens
 
-  <p align="center">
-    Faucet, Oracle & Vault / Relayer
-  </p>
-</p>
+### part of the TRADING/ARBITRAGE BOTS bounty (https://github.com/interlay/bounties/issues/2)
 
-_This project is currently under active development_.
+### License
+Copyright 2022 Kint@Sens
 
-## Getting started
+The Premium BOT repository is a fork of the interlay/interbtc-clients. All the modifications are licensed under the Apache License, Version 2.0. 
+See the LICENSE_PREMIUM_BOT file.
 
-### Prerequisites
+### Project Repository
 
-```
-curl https://sh.rustup.rs -sSf | sh
-```
+### Video presentation
+## Overview
+The Premium BOT is composed of two binaries, the Redemer and the Issuer. They are supposed to be run in parallel. The Redeemer consumes KBTC[^1] when premium redeems are possible and generated BTC. The Issuer consumes the BTC and refills the Redeemer KBTC balance.
 
-Please also install the following dependencies:
+The Premium BOT is written in Rust as an fork of the interbtc-clients repository of interlay. 
 
-- `cmake`
-- `clang` (>=10.0.0)
-- `clang-dev`
-- `libc6-dev`
-- `libssl-dev`
-- `pkg-config` (on Ubuntu)
-
-### Installation
-
-#### Faucet
-
-The testnet may use a faucet to allow users and vaults to self-fund up to a daily limit.
-
-To start the Faucet follow the instructions contained in the [Faucet README](./faucet/README.md).
-
-#### Oracle
-
-The interBTC bridge requires a price oracle to calculate collateralization rates, for local development we can run this client
-to automatically update the exchange rate at a pre-determined time interval.
-
-To start the Oracle follow the instructions contained in the [Oracle README](./oracle/README.md).
-
-#### Vault
-
-The vault client is used to intermediate assets between Bitcoin and the BTC Parachain.
-It is also capable of submitting Bitcoin block headers to the BTC Parachain.
-
-To start the Vault follow the instructions contained in the [Vault README](./vault/README.md).
-
-### Development
-
-Building requires a specific rust toolchain and nightly compiler version. The
-requirements are specified in the [./rust-toolchain.toml](./rust-toolchain.toml)
-[override file](https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file).
-
-Running `rustup show` from the root directory of this repo should be enough to
-set up the toolchain and you can inspect the output to verify that it matches
-the version specified in the override file.
-
-Use the following command to fetch the newest metadata from a live chain:
-
-```shell
-curl -sX POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"state_getMetadata", "id": 1}' localhost:9933 | jq .result | cut -d '"' -f 2 | xxd -r -p > runtime/metadata.scale
-```
-
-To build, one of the following mutually-exclusive features must be specified:
-- parachain-metadata-interlay
-- parachain-metadata-kintsugi
-- parachain-metadata-testnet
-- standalone-metadata
-
-The default command for building the clients, assuming a standalone chain, is:
-```shell
-cargo build --features=standalone-metadata
-```
 
 <p align="center">
-  <a href="https://web3.foundation/grants/">
-    <img src="media/web3_grants.png">
+  <a href="/img/premium_bot.png">
+    <img alt="Premium BOT flowchart" src="media/premium_bot.png">
   </a>
-</p>
 
-## Troubleshooting
 
-**Too many open files**
+### The Redeemer
+The purpose of the Redeemer is to monitor vaults for Premium Redeem opportunities and then request premium redeems with as much of its kBTC balance as possible and transfer BTC in the Issuer's BTC Wallet.
 
-On `cargo test` the embedded parachain node in the integration tests can consume a lot of resources. Currently the best workaround is to increase the resource limits of the current user.
 
-Use `ulimit -a` to list the current resource limits. To increase the maximum number of files set `ulimit -n 4096` or some other reasonable limit. 
+The Redeemer will monitor the active vaults until it finds a vault that offers Premium Redeem due to its collateralization level.
+Once found it will request a premium redeem of the maximum available amount (limited by the bot's own kBTC balance).
+Once the Redeemer has run out of kBTC balance it will sleep until its balance is refilled and then it will resume searching for Premium Redeem Vaults.
+<p align="center">
+  <a href="/img/premium_bot.png">
+    <img alt="Premium BOT flowchart" src="media/redeemer.png">
+  </a>
+
+### The Issuer
+Tue purpose of the Issuer is to select a vault with issuable capacity and send issue request to it in order to consume BTC and fill the kBTC account of the Redeemer. The Issuer will repeat this as long as it has BTC Balance and as long as it finds a vault with some kBTC capacity. It will then be idle until its BTC balance is refilled again by the Redeemer.  
+<p align="center">
+  <a href="/img/premium_bot.png">
+    <img alt="Premium BOT flowchart" src="media/issuer.png">
+  </a>
+
+
+### Typical Use case
+The use case of the Premium BOT is the following:
+
+A user provides an account on the Intrelay para (the BOT Interlay Account) with a certain amount of wrapped token (kBTC, iBTC) and some native token (KINT, INTR) for gas. Ideally the amount allocated 
+
+## Technical details
+
+### How to build
+
+### Hot to run
+
+
+
+[^1]: We refer here to a Kintsugi Parachain, but the Premium BOT will work similarly in a Testnet or Interlay network. Just replace the Kintsugi, KBTC, KINT, KSM terms accordingly.
