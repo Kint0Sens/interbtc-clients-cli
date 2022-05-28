@@ -38,7 +38,11 @@ mod metadata_aliases {
         security::types::{ErrorCode, StatusCode},
         vault_registry::types::VaultStatus,
     };
-    pub type InterBtcVault =
+//CLI start
+    pub type InterBtcSystemVault =
+    metadata::runtime_types::vault_registry::types::SystemVault< Balance, CurrencyId>;
+//CLI end
+pub type InterBtcVault =
         metadata::runtime_types::vault_registry::types::Vault<AccountId, BlockNumber, Balance, CurrencyId>;
     pub use metadata::runtime_types::vault_registry::types::Wallet;
     pub type InterBtcRichBlockHeader = metadata::runtime_types::btc_relay::types::RichBlockHeader<BlockNumber>;
@@ -59,6 +63,9 @@ mod metadata_aliases {
     pub use metadata::refund::events::{ExecuteRefund as ExecuteRefundEvent, RequestRefund as RequestRefundEvent};
 
     pub use metadata::redeem::events::{ExecuteRedeem as ExecuteRedeemEvent, RequestRedeem as RequestRedeemEvent};
+//CLI begin
+pub type LiquidationRedeemEvent = metadata::redeem::events::LiquidationRedeem;
+//CLI end    
 
     pub use metadata::security::events::UpdateActiveBlock as UpdateActiveBlockEvent;
 
@@ -105,6 +112,7 @@ mod metadata_aliases {
     >;
     pub type VaultId = metadata::runtime_types::interbtc_primitives::VaultId<AccountId, CurrencyId>;
     pub type VaultCurrencyPair = metadata::runtime_types::interbtc_primitives::VaultCurrencyPair<CurrencyId>;
+    
 
     #[cfg(feature = "parachain-metadata-interlay")]
     pub type EncodedCall = metadata::runtime_types::interlay_runtime_parachain::Call;

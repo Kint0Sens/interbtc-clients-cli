@@ -19,7 +19,10 @@ standalone-metadata = []
 
 [dependencies]
 serde = { version = "1.0.136", features = ["derive"] }
+# start of CLI added RPC functions
+#codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive", "full"] }
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive", "full"] }
+# end of CLI added RPC functions
 async-trait = "0.1.40"
 thiserror = "1.0"
 serde_json = "1.0.71"
@@ -31,6 +34,9 @@ log = "0.4.0"
 url = "2"
 cfg-if = "1.0"
 prometheus = { version = "0.12.0", features = ["process"] }
+# start of CLI added RPC functions
+scale-info = { version = "2.0.0", default-features = false, features = ["derive"] }
+# end of CLI added RPC functions
 
 # Substrate dependencies
 sp-arithmetic = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.19" }

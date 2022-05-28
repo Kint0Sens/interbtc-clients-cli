@@ -4,6 +4,7 @@
 event-logs
 faucet/kv
 keyfile.json
+keyfile_btc.json
 .deploy/monitoring/data
 .deploy/monitoring/prometheus
 .deploy/monitoring/alertmanager
