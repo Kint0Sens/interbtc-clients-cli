@@ -1,9 +1,9 @@
 [package]
-name = "issue_bot"
+name = "redeemer"
 version = "0.0.1"
 authors = ["https://github.com/Kint0Sens"]
 edition = "2018"
-description = "InterBTC Premium Bot - Issue"
+description = "InterBTC Premium Bot - Redeem"
 
 [dependencies]
 log = "0.4.6"
@@ -17,10 +17,12 @@ git-version = "0.3.4"
 # Workspace dependencies
 runtime = { path = "../../runtime" }
 bitcoin = { path = "../../bitcoin" }
-real-bitcoin = { version = "0.27.1", package = "bitcoin" }
-bdk = "0.16.0"
 common = { path = "../../cli/common" }
 
+[dependencies.module-oracle-rpc-runtime-api]
+git = "https://github.com/interlay/interbtc"
+rev = "2a81e9950beeace96d15d8da65282f548632e585"
+package = "module-oracle-rpc-runtime-api"
 
 
 [dev-dependencies]
@@ -28,6 +30,4 @@ common = { path = "../../cli/common" }
 # Workspace dependencies
 runtime = { path = "../../runtime", features = ["testing-utils"] }
 bitcoin = { path = "../../bitcoin", features = ["cli"] }
-real-bitcoin = { version = "0.27.1", package = "bitcoin" }
-# Substrate dependencies
-#sp-keyring = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.8" }
+

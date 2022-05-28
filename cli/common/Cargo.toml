@@ -30,7 +30,7 @@ bitcoin = { path = "../../bitcoin" }
 
 [dependencies.primitives]
 git = "https://github.com/interlay/interbtc"
-rev = "f1ed5205c29934170b0674e6b60a847028b9735e"
+rev = "2a81e9950beeace96d15d8da65282f548632e585"
 package = "interbtc-primitives"
 
 [dev-dependencies]

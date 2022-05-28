@@ -14,7 +14,7 @@ use runtime::{
     VaultId,
     VaultStatus,
     AccountId,
-    CurrencyInfo,
+    // CurrencyInfo,
     CurrencyIdExt,
     parse_wrapped_currency,
     parse_collateral_currency,
@@ -37,14 +37,14 @@ const ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 #[derive(Parser)]
 #[clap(name = NAME, version = VERSION, author = AUTHORS, about = ABOUT)]
 struct Cli {
-    /// Simulation mode. Transaction not sent.
-    #[clap(short, long, parse(from_occurrences))]
-    testmode: usize,
-
     /// Return all logs
     /// Overridden by RUST_LOG env variable
     #[clap(short, long, parse(from_occurrences))]
     verbose: usize,
+
+    #[clap(short, long, parse(from_occurrences))]
+    wait_for_issued_kbtc: usize,
+
 
     /// Keyring / keyfile options containng the user's info
     #[clap(flatten)]
@@ -69,7 +69,7 @@ pub struct ToolConfig {
 
     /// Max Amount to issue, in satoshis, 
     /// must be greater than Bridge Fee + BTC Network Fee + BTC Dust Limit 
-    #[clap(long, validator = amount_gt_minimal, default_value = "999999999999999999999")]
+    #[clap(long, validator = amount_gt_minimal, default_value = "2000")]
     max_issue_amount: u128,
 
     /// Min Amount to issue, in satoshis, 
@@ -91,8 +91,13 @@ pub struct ToolConfig {
     sleeptime_not_enough_btc: u64,
 
     /// Sleep time after each succesful redeem loop
-    #[clap(long, default_value = "10")]
+    #[clap(long, default_value = "15")]
     sleeptime_main_loop: u64,
+
+    /// Sleep time wait for BTC trasfer completion
+    #[clap(long, default_value = "120")]
+    sleeptime_wait_for_btc_transfer: u64,
+
 
     /// Collateral
     #[clap(long, default_value = "KSM")]  // Make network dependent default
@@ -136,7 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let parachain = parachain_config.try_connect(signer.clone(), shutdown_tx.clone()).await?;
     tracing::info!("{}",TEXT_CONNECTED);
     let native_id = parachain.get_native_currency_id();
-
+ 
     tracing::info!("{}",TEXT_SEPARATOR);
     
     let use_forced_vault = if config.vault_account_id == "" { 
@@ -156,32 +161,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     };
   
-    tracing::info!("Signer:           {}",signer_account_id.to_ss58check());
-    tracing::info!("Max Issue amount:        {} {} Sat",config.max_issue_amount, config.chain_wrapped_id);
-    tracing::info!("Min Issue amount:        {} {} Sat",config.min_issue_amount, config.chain_wrapped_id);
-    tracing::info!("Min Btc balance:         {} {} Sat",config.min_btc_balance, config.chain_wrapped_id);
+    tracing::info!("Signer:                  {}",signer_account_id.to_ss58check());
+    tracing::info!("Max issue amount:        {} {} sat",config.max_issue_amount, config.chain_wrapped_id);
+    tracing::info!("Min issue amount:        {} {} sat",config.min_issue_amount, config.chain_wrapped_id);
+    tracing::info!("Min balance:             {} {} sat",config.min_btc_balance, config.chain_wrapped_id);
 
     let mut balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
     let mut balance_native = parachain.get_free_balance_for_id(signer_account_id.clone(),native_id).await?;
-    tracing::info!("Balances(sat/planck):  {}/{} {}/{}", 
-        balance_wrapped,
-        balance_native,
-        config.chain_wrapped_id,
-        get_currency_str(native_id.inner())
-    );
+    tracing::info!("Initial wrapped balance: {} {} sat", balance_wrapped, config.chain_wrapped_id);
+    tracing::info!("Initial native balance:  {} {} planck", balance_native, get_currency_str(native_id.inner()));
 
-    tracing::info!("{}",TEXT_SEPARATOR);
+    let mut loop_iteration : i32= 0;
 
     // Setup wallet
     let wallet = setup_wallet(ext,int)?;
+    tracing::info!("Setting up BTC wallet");
+    wallet.sync(noop_progress(), None)?;
+    // Check available btc balance
+    let mut btc_balance = wallet.get_balance()?;
+    tracing::info!("Initial BTC balance:     {} BTC sat", btc_balance);
+
+
+
     // Main loop
     loop {
-        // Check available btc balance
-        tracing::info!("Synching wallet");
-        wallet.sync(noop_progress(), None)?;
-        let balance = wallet.get_balance()?;
-        tracing::info!("Wallet balance in SAT: {}", balance);
-        if balance < config.min_btc_balance {
+        loop_iteration = loop_iteration + 1;
+        tracing::info!("[{}]{}",loop_iteration,TEXT_SEPARATOR);
+        if btc_balance < config.min_btc_balance {
             // Not enough BTC. Sleep and retry later.
             tracing::warn!("Not enough BTC balance.");
             tracing::info!("Waiting {} seconds before checking again", config.sleeptime_not_enough_btc);
@@ -240,16 +246,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         // Emit Issue Request
-        tracing::trace!("Sending issue request to parachain");
+        tracing::info!("Sending issue request to parachain");
         let issue_amount = if config.max_issue_amount > max_issuable_amt { max_issuable_amt } else { config.max_issue_amount };
         let issue = parachain.request_issue(issue_amount, &issue_vault).await?;
         tracing::info!("Issue request accepted");
-        tracing::info!("BTC address:      {:?}",issue.vault_address);
-        tracing::info!("                  {:?}",issue.vault_address.encode_str(BITCOIN_NETWORK));
+        // tracing::info!("Issue BTC address: {:?}",issue.vault_address);
+        tracing::info!("Issue BTC address: {:?}",issue.vault_address.encode_str(BITCOIN_NETWORK).unwrap());
         
-        tracing::info!("Issue amount:     {} {} Sat",issue.amount, config.chain_wrapped_id);
-        tracing::info!("Issue fee:        {} {} Sat",issue.fee, config.chain_wrapped_id);
+        tracing::info!("Issue amount:     {} {} sat",issue.amount, config.chain_wrapped_id);
+        tracing::info!("Issue fee:        {} {} sat",issue.fee, config.chain_wrapped_id);
 
+        tracing::info!("Building BTC transaction");
         // Send BTC transaction
         let tx_amount: u64 = (issue.amount as u128 + issue.fee as u128).try_into().unwrap();
         let mut tx_builder = wallet.build_tx();
@@ -260,40 +267,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .add_recipient(issue_request_btc_address.script_pubkey(), tx_amount)
             .enable_rbf();
         let (mut psbt, tx_details) = tx_builder.finish()?;
-        tracing::info!("Transaction details: {:#?}", tx_details);
-        tracing::info!("Signing transaction");
+        tracing::trace!("Transaction details: {:#?}", tx_details);
+        tracing::info!("TXID:  {}",tx_details.txid);
+
+        tracing::info!("Signing BTC transaction");
         let finalized = wallet.sign(&mut psbt, SignOptions::default())?;
         assert!(finalized, "Tx has not been finalized");
-        tracing::info!("Transaction Signed: {}", finalized);
         let raw_transaction = psbt.extract_tx();
         let txid = wallet.broadcast(&raw_transaction)?;
-        tracing::info!(
-            "Transaction sent! TXID: {txid}.\nExplorer URL: https://blockstream.info/testnet/tx/{txid}",
-            txid = txid
-        );
+        tracing::info!("Transaction signed & sent - https://blockstream.info/testnet/tx/{}", txid);
 
         // Evaluate the balances and report deltas
-        let balance_wrapped_new = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
+
+        // Optional loop to wait for BTC transfer completion
+        let mut balance_wrapped_new: u128;
+        let mut delta_wrapped : i128;
+        loop {
+            balance_wrapped_new = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
+            delta_wrapped  = balance_wrapped_new as i128 - balance_wrapped as i128;
+            if cli.wait_for_issued_kbtc == 0 {
+                tracing::info!("Not waiting for BTC transfer completion. {} balance will be initially unchanged",config.chain_wrapped_id);
+                break;
+            }
+            if delta_wrapped != 0 {
+                break;
+            }
+            tracing::info!("Waiting {} seconds for BTC tranfer completion", config.sleeptime_wait_for_btc_transfer);
+            thread::sleep(Duration::from_secs(config.sleeptime_wait_for_btc_transfer));
+        }
+
         let balance_native_new = parachain.get_free_balance_for_id(signer_account_id.clone(),native_id).await?;
-        tracing::info!("Balances(sat/planck):  {}/{} {}/{:?}", 
-            balance_wrapped_new,
-            balance_native_new,
-            config.chain_wrapped_id,
-            native_id
-        );
-        tracing::info!("{}", native_id.inner().name().to_lowercase());
-        tracing::info!("Balance deltas(sat/planck):  {}/{} {}/{:?}", 
-            balance_wrapped_new - balance_wrapped,
-            balance_native_new - balance_native,
-            config.chain_wrapped_id,
-            native_id
-        );
+        let delta_native : i128 = balance_native_new as i128 - balance_native as i128;
+        wallet.sync(noop_progress(), None)?;
+        let btc_balance_new = wallet.get_balance()?;
+        let delta_btc : i128 = btc_balance_new as i128 - btc_balance as i128;
+        tracing::info!("Wrapped balance:       {} {} sat", balance_wrapped_new, config.chain_wrapped_id);
+        tracing::info!("Native balance:        {} {} planck", balance_native_new, get_currency_str(native_id.inner()));
+        tracing::info!("BTC balance:           {} BTC sat", btc_balance_new);
+        tracing::info!("Delta wrapped balance: {} {} sat", delta_wrapped, config.chain_wrapped_id);
+        tracing::info!("Delta native balance:  {} {} planck", delta_native, get_currency_str(native_id.inner()));
+        tracing::info!("Delta BTC balance:     {} BTC sat", delta_btc);
         balance_wrapped = balance_wrapped_new;
         balance_native = balance_native_new;
+        btc_balance = btc_balance_new;
 
         tracing::info!("Waiting {} seconds before next loop iteration", config.sleeptime_main_loop);
         thread::sleep(Duration::from_secs(config.sleeptime_main_loop));
-        tracing::info!("{}",TEXT_SEPARATOR);
 
     };
     Ok(())  

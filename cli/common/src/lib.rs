@@ -5,7 +5,7 @@ use pad::{PadStr, Alignment};
 // use clap::Parser;
 // use std::str::FromStr;
 // use std::ops::RangeInclusive;
-pub use primitives::TokenSymbol;
+use primitives::TokenSymbol;
 use std::path::Path;
 use std::ffi::OsStr;
 use std::ops::RangeInclusive;

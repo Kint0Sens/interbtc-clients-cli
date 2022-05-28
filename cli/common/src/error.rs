@@ -26,6 +26,6 @@ pub enum Error {
     // AccountAlreadyFunded,
      #[error("Mathematical operation error")]
     MathError,
-    // #[error("No faucet allowance set for account type")]
-    // NoFaucetAllowance,
+    #[error("test")]
+     NoPremiumRedeemVaultFound,
 }

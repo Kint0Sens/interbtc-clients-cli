@@ -6,5 +6,10 @@ members = [
   "vault",
   "bitcoin",
   "faucet",
-  "service"
+  "cli/common",
+  "cli/explore",
+  "service",
+  "premium_bot/issuer",
+  "premium_bot/redeemer"
+
 ]

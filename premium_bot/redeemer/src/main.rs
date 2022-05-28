@@ -1,5 +1,7 @@
+use common::Error;
 use std::env;
 use clap::Parser;
+use runtime::Error as RuntimeError;
 
 use git_version::git_version;
 use common::*;
@@ -18,7 +20,8 @@ use runtime::{
         BtcAddress,
         Ss58Codec,
         CurrencyIdExt,
-        CurrencyInfo,
+        // CurrencyInfo,
+        PrettyPrint,
         InterBtcParachain,
         parse_collateral_currency,
         parse_wrapped_currency,
@@ -62,7 +65,7 @@ struct Cli {
 pub struct ToolConfig {
     /// Amount to redeem, in satoshis, 
     /// must be greater than Bridge Fee + BTC Network Fee + BTC Dust Limit 
-    #[clap(long, validator = amount_gt_minimal, default_value = "999999999999999999999")]
+    #[clap(long, validator = amount_gt_minimal, default_value = "2100")]
     max_redeem_amount: u128,
 
     /// Minimum wallet balance amount of wrapped token in sat, 
@@ -121,6 +124,9 @@ async fn main() -> Result<(), Error> {
     tracing::trace!("{}",TEXT_CONNECT_ATTEMPT);
     let parachain = parachain_config.try_connect(signer.clone(), shutdown_tx.clone()).await?;
     tracing::info!("{}",TEXT_CONNECTED);
+    tracing::info!("{}",TEXT_SEPARATOR);
+ 
+    
     let native_id = parachain.get_native_currency_id();
     // let signer_account_id = parachain.get_account_id();
     let mut balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
@@ -128,22 +134,15 @@ async fn main() -> Result<(), Error> {
     let mut balance_native = parachain.get_free_balance_for_id(signer_account_id.clone(),native_id).await?;
 
 
-    tracing::info!("Signer:                {}",signer_account_id.to_ss58check());
+    tracing::info!("Signer:                     {}",signer_account_id.to_ss58check());
     // tracing::info!("Vault:                 {}",vault_id.account_id.to_ss58check());
-    tracing::info!("BTC Address:           {}",config.btc_address);
-    tracing::info!("BTC Address:           {:?}",btc_address);
-    tracing::info!("Max Redeem amount:     {} {} Sat",config.max_redeem_amount, config.chain_wrapped_id);
-    tracing::info!("Min Wrapped balance:   {} {} Sat",config.min_wrapped_balance, config.chain_wrapped_id);
-
-    tracing::info!("Balances(sat/planck):  {}/{}/{} {}/{}/{:?}", 
-        balance_wrapped,
-        balance_collateral,
-        balance_native,
-        config.chain_wrapped_id,
-        config.chain_collateral_id,
-        get_currency_str(native_id.inner())
-    );
-    tracing::info!("{}", native_id.inner().name().to_lowercase());
+    tracing::info!("Redeem BTC address:         {}",config.btc_address);
+    // tracing::info!("BTC Address:           {:?}",btc_address);
+    tracing::info!("Max redeem amount:          {} {} sat",config.max_redeem_amount, config.chain_wrapped_id);
+    tracing::info!("Min wrapped balance:        {} {} sat",config.min_wrapped_balance, config.chain_wrapped_id);
+    tracing::info!("Initial wrapped balance:    {} {} sat", balance_wrapped, config.chain_wrapped_id);
+    tracing::info!("Initial collateral balance: {} {} planck", balance_collateral, config.chain_collateral_id);
+    tracing::info!("Initial native balance:     {} {} planck", balance_native, get_currency_str(native_id.inner()));
 
     //Main loop
     // Check available wrapped balance
@@ -152,20 +151,26 @@ async fn main() -> Result<(), Error> {
     // Report KSM Gain
     // repeat
 
+    let mut loop_iteration : i32= 0;
     loop {
+        loop_iteration = loop_iteration + 1;
+        tracing::info!("[{}]{}",loop_iteration,TEXT_SEPARATOR);
         // Is there enough wrapped balance to proceed?
         if balance_wrapped < config.min_wrapped_balance {
             tracing::warn!("{} balance lower than minimum balance of {}  Sat", config.chain_wrapped_id, config.min_wrapped_balance);
             tracing::info!("Waiting {} seconds before checking again", config.sleeptime_not_enough_balance);
             thread::sleep(Duration::from_secs(config.sleeptime_not_enough_balance));
             continue;
-        }
+        } else {
+            tracing::info!("Sufficient {} balance to attempt premium redeems", config.chain_wrapped_id);
+        };
+
         // Are there some vaults with premium redeem available?
         // let result = parachain.get_premium_redeem_vaults().await;
         let result = get_premium_redeem_vaults_or_all_active(parachain.clone(), cli.treat_all_vaults_as_premium).await;
         match &result {
             Ok(premium_vaults) => {
-                if premium_vaults.len() == 0 {
+                if premium_vaults.len() == 0 { // This should not occur. RPC returns error instead
                     tracing::warn!("No premium redeem vault found");
                     tracing::info!("Waiting {} seconds before checking again", config.sleeptime_no_premium_vault);
                     thread::sleep(Duration::from_secs(config.sleeptime_no_premium_vault));
@@ -174,28 +179,53 @@ async fn main() -> Result<(), Error> {
         
             }
             Err(error) => {
-                tracing::error!("Error when checking for premium vaults");
-                tracing::error!("{:?}",error);
-                continue;
+                let error_str = format!("{:?}",error); 
+                if error_str.contains("Unable to find a vault below") {
+                    tracing::warn!("No premium redeem vault found");
+                    tracing::info!("Waiting {} seconds before checking again", config.sleeptime_no_premium_vault);
+                    thread::sleep(Duration::from_secs(config.sleeptime_no_premium_vault));
+                    continue;  
+                } else {
+                    match error {
+                        RuntimeError::VaultNotFound => {
+                            tracing::warn!("No redeem vault found");
+                            tracing::info!("Waiting {} seconds before checking again", config.sleeptime_no_premium_vault);
+                            thread::sleep(Duration::from_secs(config.sleeptime_no_premium_vault));
+                            continue;  
+                        },
+                        _ => {
+                            tracing::error!("Error when checking for premium vaults");
+                            tracing::error!("{:?}",error);
+                            tracing::info!("Waiting {} seconds before checking again", config.sleeptime_no_premium_vault);
+                            thread::sleep(Duration::from_secs(config.sleeptime_no_premium_vault));
+                            continue;
+                        }
+                    }
+                }
             }
         }
 
         let premium_vaults = result.unwrap();
         // select 1st vault with sufficient premium redeemable amount compared to configured max_redeem_amount
         // if none match the max_redeem_amount get the greatest amt
-        let mut max_premiumm_amt = 0; 
+        let mut max_premium_amt = 0; 
         let mut index : usize = 0;
         let mut vault_index : usize = 0;
 
         for (_, loop_premium_amt) in premium_vaults.iter() {
             if loop_premium_amt.amount > config.max_redeem_amount {
                 // Found eligible vault. use it
+                tracing::info!("Found. Index/Loop Amt/Vault_Index/max_premium_amt {}/{}/{}/{}",
+                        index,loop_premium_amt.amount,vault_index, max_premium_amt);
                 vault_index = index;
                 break;
             };
-            if max_premiumm_amt <= loop_premium_amt.amount {
-                max_premiumm_amt = loop_premium_amt.amount;
+            if max_premium_amt <= loop_premium_amt.amount {
+                max_premium_amt = loop_premium_amt.amount;
                 vault_index = index;
+                tracing::info!("Search. Index/Loop Amt/Vault_Index/max_premium_amt {}/{}/{}/{}",
+                        index,loop_premium_amt.amount,vault_index, max_premium_amt);
+
             }; 
             index = index + 1;
         };
@@ -210,8 +240,11 @@ async fn main() -> Result<(), Error> {
         tracing::info!("Redeem request amount  {} {} Sat",
             redeem_amount,
             config.chain_wrapped_id);
+        tracing::info!("Found vault {} with capacity {}", target_vault_id.account_id.pretty_print(), premium_amt.amount);
+
+        tracing::info!("Sending redeem request to parachain");
         let _redeem_id = parachain.request_redeem(redeem_amount, btc_address, &target_vault_id).await?;
-        tracing::info!("Parachain confirms redeem request to vault {} of {} {} Sat to BTC address {}",
+        tracing::info!("Parachain confirms redeem request to vault {} of {} {} sat to BTC address {}",
                 target_vault_id.account_id.to_ss58check(),
                 redeem_amount,
                 config.chain_wrapped_id,
@@ -222,23 +255,15 @@ async fn main() -> Result<(), Error> {
         let balance_wrapped_new = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
         let balance_collateral_new = parachain.get_free_balance_for_id(signer_account_id.clone(),collateral_id).await?;
         let balance_native_new = parachain.get_free_balance_for_id(signer_account_id.clone(),native_id).await?;
-        tracing::info!("Balances(sat/planck):  {}/{}/{} {}/{}/{:?}", 
-            balance_wrapped_new,
-            balance_collateral_new,
-            balance_native_new,
-            config.chain_wrapped_id,
-            config.chain_collateral_id,
-            get_currency_str(native_id.inner())
-        );
-        tracing::info!("{}", native_id.inner().name().to_lowercase());
-        tracing::info!("Deltas(sat/planck):  {}/{}/{} {}/{}/{:?}", 
-            balance_wrapped_new - balance_wrapped,
-            balance_collateral_new - balance_collateral,
-            balance_native_new - balance_native,
-            config.chain_wrapped_id,
-            config.chain_collateral_id,
-            get_currency_str(native_id.inner())
-        );
+        let delta_wrapped : i128 = balance_wrapped_new as i128 - balance_wrapped as i128;
+        let delta_collateral : i128 = balance_collateral_new as i128 - balance_collateral as i128;
+        let delta_native : i128 = balance_native_new as i128 - balance_native as i128;
+        tracing::info!("Wrapped balance:          {} {} sat", balance_wrapped_new, config.chain_wrapped_id);
+        tracing::info!("Collateral balance:       {} {} planck", balance_collateral_new, config.chain_collateral_id);
+        tracing::info!("Native balance:           {} {} planck", balance_native_new, get_currency_str(native_id.inner()));
+        tracing::info!("Delta wrapped balance:    {} {} sat", delta_wrapped, config.chain_wrapped_id);
+        tracing::info!("Delta collateral balance: {} {} planck", delta_collateral, config.chain_collateral_id);
+        tracing::info!("Delta native balance:     {} {} planck", delta_native, get_currency_str(native_id.inner()));
         balance_wrapped = balance_wrapped_new;
         balance_collateral = balance_collateral_new;
         balance_native = balance_native_new;
@@ -251,22 +276,32 @@ async fn main() -> Result<(), Error> {
 }
 
 
-async fn get_premium_redeem_vaults_or_all_active(parachain: InterBtcParachain, treat_all_as_premium : usize) -> Result<Vec<(VaultId,BalanceWrapper<u128>)>,runtime::Error> {
+ async fn get_premium_redeem_vaults_or_all_active(parachain: InterBtcParachain, treat_all_as_premium : usize) -> Result<Vec<(VaultId,BalanceWrapper<u128>)>,runtime::Error> {
     if treat_all_as_premium == 0 {
         parachain.get_premium_redeem_vaults().await
     } else {
-        let vaults = parachain.get_all_vaults().await?;
+        let vaults = parachain.get_all_vaults().await;
         let mut result : Vec<(VaultId,BalanceWrapper<u128>)> = Vec::new();
-        for vault in vaults.iter() {
-            match vault.status {
-                VaultStatus::Active(active) => { 
-                    if active == true {
-                        result.push((vault.id.clone(), BalanceWrapper { amount: vault.issued_tokens }))
-                    }
-                },
-                _ => {}
-            };
-        };
+        match vaults {
+            Ok(vaults) => {
+                for vault in vaults.iter() {
+                    match vault.status {
+                        VaultStatus::Active(active) => { 
+                            if active == true {
+                                let redeemable = vault.issued_tokens - vault.to_be_redeemed_tokens;
+                                result.push((vault.id.clone(), BalanceWrapper { amount: redeemable }))
+                            }
+                        },
+                        _ => {}
+                    };
+                };
+            }
+            _  => {
+                // Generate an error treated as no premium redeem vault
+                return Err(RuntimeError::VaultNotFound);
+            }
+        }
+
         Ok(result)
     }
 }
