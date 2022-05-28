@@ -251,7 +251,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let issue = parachain.request_issue(issue_amount, &issue_vault).await?;
         tracing::info!("Issue request accepted");
         // tracing::info!("Issue BTC address: {:?}",issue.vault_address);
-        tracing::info!("Issue BTC address: {:?}",issue.vault_address.encode_str(BITCOIN_NETWORK).unwrap());
+        tracing::info!("Issue BTC address: {}",issue.vault_address.encode_str(BITCOIN_NETWORK).unwrap());
         
         tracing::info!("Issue amount:     {} {} sat",issue.amount, config.chain_wrapped_id);
         tracing::info!("Issue fee:        {} {} sat",issue.fee, config.chain_wrapped_id);

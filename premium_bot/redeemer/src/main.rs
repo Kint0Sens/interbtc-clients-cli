@@ -215,16 +215,16 @@ async fn main() -> Result<(), Error> {
         for (_, loop_premium_amt) in premium_vaults.iter() {
             if loop_premium_amt.amount > config.max_redeem_amount {
                 // Found eligible vault. use it
-                tracing::info!("Found. Index/Loop Amt/Vault_Index/max_premium_amt {}/{}/{}/{}",
-                        index,loop_premium_amt.amount,vault_index, max_premium_amt);
+                // tracing::info!("Found. Index/Loop Amt/Vault_Index/max_premium_amt {}/{}/{}/{}",
+                //       index,loop_premium_amt.amount,vault_index, max_premium_amt);
                 vault_index = index;
                 break;
             };
             if max_premium_amt <= loop_premium_amt.amount {
                 max_premium_amt = loop_premium_amt.amount;
                 vault_index = index;
-                tracing::info!("Search. Index/Loop Amt/Vault_Index/max_premium_amt {}/{}/{}/{}",
-                        index,loop_premium_amt.amount,vault_index, max_premium_amt);
+                // tracing::info!("Search. Index/Loop Amt/Vault_Index/max_premium_amt {}/{}/{}/{}",
+                //         index,loop_premium_amt.amount,vault_index, max_premium_amt);
 
             }; 
             index = index + 1;
