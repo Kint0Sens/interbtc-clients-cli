@@ -1,0 +1,2 @@
+#!/bin/sh
+cargo build --release  --features parachain-metadata-testnet --target-dir ./target/testnet

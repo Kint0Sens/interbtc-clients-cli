@@ -180,3 +180,4 @@ impl From<RpcError> for BitcoinRpcError {
         }
     }
 }
+

@@ -1,10 +1,15 @@
 [workspace]
 members = [
-  "oracle",
-  "runtime",
-  "runtime/client",
-  "vault",
-  "bitcoin",
-  "faucet",
-  "service"
+  # "oracle",
+  # "runtime",
+  # "runtime/client",
+  # "vault",
+  # "bitcoin",
+  # "faucet",
+  "cli/common",
+  "cli/explore",
+  # "service",
+  "premium_bot/issuer",
+  "premium_bot/redeemer"
+
 ]

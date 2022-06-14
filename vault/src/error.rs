@@ -5,6 +5,7 @@ use parity_scale_codec::Error as CodecError;
 use runtime::{Error as RuntimeError, SubxtError};
 use service::Error as ServiceError;
 use thiserror::Error;
+use std::collections::HashMap;
 
 #[derive(Error, Debug)]
 pub enum Error {

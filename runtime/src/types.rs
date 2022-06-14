@@ -4,7 +4,7 @@ use subxt::sp_core::{crypto::Ss58Codec, sr25519::Pair as KeyPair};
 
 pub use primitives::{
     CurrencyId,
-    CurrencyId::Token,
+    CurrencyId::{ForeignAsset, Token},
     TokenSymbol::{DOT, IBTC, INTR, KBTC, KINT, KSM},
 };
 
@@ -38,7 +38,11 @@ mod metadata_aliases {
         security::types::{ErrorCode, StatusCode},
         vault_registry::types::VaultStatus,
     };
-    pub type InterBtcVault =
+//CLI start
+    pub type InterBtcSystemVault =
+    metadata::runtime_types::vault_registry::types::SystemVault< Balance, CurrencyId>;
+//CLI end
+pub type InterBtcVault =
         metadata::runtime_types::vault_registry::types::Vault<AccountId, BlockNumber, Balance, CurrencyId>;
     pub use metadata::runtime_types::vault_registry::types::Wallet;
     pub type InterBtcRichBlockHeader = metadata::runtime_types::btc_relay::types::RichBlockHeader<BlockNumber>;
@@ -59,6 +63,9 @@ mod metadata_aliases {
     pub use metadata::refund::events::{ExecuteRefund as ExecuteRefundEvent, RequestRefund as RequestRefundEvent};
 
     pub use metadata::redeem::events::{ExecuteRedeem as ExecuteRedeemEvent, RequestRedeem as RequestRedeemEvent};
+//CLI begin
+pub type LiquidationRedeemEvent = metadata::redeem::events::LiquidationRedeem;
+//CLI end    
 
     pub use metadata::security::events::UpdateActiveBlock as UpdateActiveBlockEvent;
 
@@ -105,6 +112,7 @@ mod metadata_aliases {
     >;
     pub type VaultId = metadata::runtime_types::interbtc_primitives::VaultId<AccountId, CurrencyId>;
     pub type VaultCurrencyPair = metadata::runtime_types::interbtc_primitives::VaultCurrencyPair<CurrencyId>;
+    
 
     #[cfg(feature = "parachain-metadata-interlay")]
     pub type EncodedCall = metadata::runtime_types::interlay_runtime_parachain::Call;
@@ -132,15 +140,17 @@ impl From<[u8; 33]> for crate::BtcPublicKey {
 
 mod currency_id {
     use super::*;
+    use crate::Error;
 
     pub trait CurrencyIdExt {
-        fn inner(&self) -> primitives::TokenSymbol;
+        fn inner(&self) -> Result<primitives::TokenSymbol, Error>;
     }
 
     impl CurrencyIdExt for CurrencyId {
-        fn inner(&self) -> primitives::TokenSymbol {
+        fn inner(&self) -> Result<primitives::TokenSymbol, Error> {
             match self {
-                Token(x) => *x,
+                Token(x) => Ok(*x),
+                ForeignAsset(_) => Err(Error::CurrencyNotFound),
             }
         }
     }
@@ -193,8 +203,14 @@ mod vault_id {
             format!(
                 "{}[{}->{}]",
                 self.account_id.pretty_print(),
-                collateral_currency.inner().symbol(),
-                wrapped_currency.inner().symbol()
+                collateral_currency
+                    .inner()
+                    .map(|i| i.symbol().to_string())
+                    .unwrap_or_default(),
+                wrapped_currency
+                    .inner()
+                    .map(|i| i.symbol().to_string())
+                    .unwrap_or_default()
             )
         }
     }
@@ -288,7 +304,7 @@ mod h256_le {
 
 mod dispatch_error {
     use crate::metadata::{
-        runtime_types::sp_runtime::{ArithmeticError, ModuleError, TokenError},
+        runtime_types::sp_runtime::{ArithmeticError, ModuleError, TokenError, TransactionalError},
         DispatchError,
     };
 
@@ -296,6 +312,7 @@ mod dispatch_error {
     type RichArithmeticError = sp_runtime::ArithmeticError;
     type RichDispatchError = sp_runtime::DispatchError;
     type RichModuleError = sp_runtime::ModuleError;
+    type RichTransactionalError = sp_runtime::TransactionalError;
 
     macro_rules! convert_enum{($src: ident, $dst: ident, $($variant: ident,)*)=> {
         impl From<$src> for $dst {
@@ -327,6 +344,8 @@ mod dispatch_error {
         DivisionByZero,
     );
 
+    convert_enum!(RichTransactionalError, TransactionalError, LimitReached, NoLayer,);
+
     impl From<RichDispatchError> for DispatchError {
         fn from(value: RichDispatchError) -> Self {
             match value {
@@ -341,6 +360,9 @@ mod dispatch_error {
                 RichDispatchError::TooManyConsumers => DispatchError::TooManyConsumers,
                 RichDispatchError::Token(token_error) => DispatchError::Token(token_error.into()),
                 RichDispatchError::Arithmetic(arithmetic_error) => DispatchError::Arithmetic(arithmetic_error.into()),
+                RichDispatchError::Transactional(transactional_error) => {
+                    DispatchError::Transactional(transactional_error.into())
+                }
             }
         }
     }

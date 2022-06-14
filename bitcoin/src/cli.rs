@@ -20,6 +20,17 @@ pub struct BitcoinOpts {
     #[clap(long, default_value = "60000")]
     pub bitcoin_connection_timeout_ms: u64,
 
+    // /// Path to the json file containing bitcoin rpc user and pass.
+    // /// Valid content of this file is e.g.
+    // /// `{ "keyname": ["rpcuser", "rpcpassword"],  "keyname2": ["rpcuser2", "rpcpassword2"] }`.
+    // #[clap(long, requires = "btc_keyname", default_value = "./btc_keyfile.json")]  // "~/keyfile.json" does not translate to /home/user/keyfile.json
+    // pub btc_keyfile: String,
+
+    // /// The name of the btc descriptors from the keyfile_btc to use.
+    // #[clap(long, requires = "keyfile_btc", default_value = "keyname_btc")]
+    // pub btc_keyname: String,
+
+
     /// Url of the electrs server - used for theft reporting. If unset, a default
     /// fallback is used depending on the detected network.
     #[clap(long)]
@@ -47,4 +58,18 @@ impl BitcoinOpts {
     pub fn new_client_with_network(&self, wallet_name: Option<String>, network: Network) -> Result<BitcoinCore, Error> {
         self.new_client_builder(wallet_name).build_with_network(network)
     }
-}
+    // pub fn get_btc_keys(&self) -> Result<(String,String, String),Error> {
+    //     // load btc credentials
+    //     let (rpcuser,rpcpassword) =
+    //         get_btc_credentials_from_file(self.btc_keyfile.as_ref(), self.btc_keyname.as_ref())?;
+
+    //     Ok((rpcuser,rpcpassword,self.btc_keyname.clone()))
+    // }
+}    
+// fn get_btc_credentials_from_file(file_path: &str, keyname_btc: &str) -> Result<(String, String), KeyLoadingError> {
+//     let file = std::fs::File::open(file_path)?;
+//     let reader = std::io::BufReader::new(file);
+//     let map : HashMap<String, Vec<String>> = serde_json::from_reader(reader)?;
+//     let desc_pair = map.get(keyname_btc).ok_or(KeyLoadingError::KeyNotFound)?;
+//     Ok((desc_pair[0].clone(),desc_pair[1].clone()))
+// }
