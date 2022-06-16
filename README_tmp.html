@@ -1,182 +1,519 @@
-# Premium BOT
-## by Kint0Sens
- part of the TRADING/ARBITRAGE BOTS bounty (https://github.com/interlay/bounties/issues/2)
+<!DOCTYPE html>
+<html>
+<head>
+<title>README.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
 
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="premium-bot">Premium BOT</h1>
+<h2 id="by-kint0sens">by Kint0Sens</h2>
+<p>part of the TRADING/ARBITRAGE BOTS bounty (https://github.com/interlay/bounties/issues/2)</p>
 <!-- TOC -->
-
-- [Premium BOT](#premium-bot)
-    - [by Kint0Sens](#by-kint0sens)
-        - [License](#license)
-        - [Project Repository](#project-repository)
-        - [Video presentation](#video-presentation)
-    - [Overview](#overview)
-        - [The Redeemer](#the-redeemer)
-        - [The Issuer](#the-issuer)
-        - [Typical Use case](#typical-use-case)
-    - [Technical details](#technical-details)
-    - [Issues and possible next steps](#issues-and-possible-next-steps)
-    - [How to build](#how-to-build)
-    - [Running the Issuer:](#running-the-issuer)
-        - [Example execution of the Issuer](#example-execution-of-the-issuer)
-        - [Example execution of the Issuer on Kintsugi chain](#example-execution-of-the-issuer-on-kintsugi-chain)
-    - [Running the Redeemer:](#running-the-redeemer)
-        - [Example executions of the Redeemer](#example-executions-of-the-redeemer)
-        - [Example executions of the Redeemer on the Kintsugi network](#example-executions-of-the-redeemer-on-the-kintsugi-network)
-
+<ul>
+<li><a href="#premium-bot">Premium BOT</a>
+<ul>
+<li><a href="#by-kint0sens">by Kint0Sens</a>
+<ul>
+<li><a href="#license">License</a></li>
+<li><a href="#project-repository">Project Repository</a></li>
+<li><a href="#video-presentation">Video presentation</a></li>
+</ul>
+</li>
+<li><a href="#overview">Overview</a>
+<ul>
+<li><a href="#the-redeemer">The Redeemer</a></li>
+<li><a href="#the-issuer">The Issuer</a></li>
+<li><a href="#typical-use-case">Typical Use case</a></li>
+</ul>
+</li>
+<li><a href="#technical-details">Technical details</a></li>
+<li><a href="#issues-and-possible-next-steps">Issues and possible next steps</a></li>
+<li><a href="#how-to-build">How to build</a></li>
+<li><a href="#running-the-issuer">Running the Issuer:</a>
+<ul>
+<li><a href="#example-execution-of-the-issuer">Example execution of the Issuer</a></li>
+<li><a href="#example-execution-of-the-issuer-on-kintsugi-chain">Example execution of the Issuer on Kintsugi chain</a></li>
+</ul>
+</li>
+<li><a href="#running-the-redeemer">Running the Redeemer:</a>
+<ul>
+<li><a href="#example-executions-of-the-redeemer">Example executions of the Redeemer</a></li>
+<li><a href="#example-executions-of-the-redeemer-on-the-kintsugi-network">Example executions of the Redeemer on the Kintsugi network</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
 <!-- /TOC -->
-
-### License
-Copyright 2022 Kint@Sens
-
-The Premium BOT repository is a fork of the interlay/interbtc-clients. All the modifications are licensed under the Apache License, Version 2.0. 
-See the LICENSE_PREMIUM_BOT file.
-
-### Project Repository
-https://github.com/Kint0Sens/interbtc-clients-cli
-The Premium BOT repository is a fork of the interlay/interbtc-clients. The PremiumBot code is available in the branch premium-bot-1.12.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/premium-bot-1.12.0)
-
-### Video presentation
-
-https://youtu.be/_ZvEypJZYjQ
-## Overview
-The Premium BOT is composed of two binaries, the Redemer and the Issuer. They are supposed to be run in parallel. 
-The Redeemer consumes KBTC[^1] and generates BTC when a vault offers premium redeems. 
-The Issuer consumes BTC and refills the Redeemer KBTC balance by sending issue requests.
-
-The Premium BOT is written in Rust as an fork of the interbtc-clients repository of interlay. 
-
-
-<p align="left">
-  <a >
-    <img alt="Premium BOT flowchart" src="media/premium_bot.png">
-  </a>
-
-
-### The Redeemer
-The purpose of the Redeemer is to monitor vaults for Premium Redeem opportunities and then request premium redeems with as much of its kBTC balance as possible and transfer BTC in the Issuer's BTC Wallet.
-
-The Redeemer will monitor the active vaults until it finds a vault that offers Premium Redeem due to its collateralization level.
-Once found it will request a premium redeem of the maximum available amount (limited by the bot's own kBTC balance).
-Once the Redeemer has run out of kBTC balance it will stay idle until its balance is refilled and then it will resume searching for Premium Redeem Vaults.
+<h3 id="license">License</h3>
+<p>Copyright 2022 Kint@Sens</p>
+<p>The Premium BOT repository is a fork of the interlay/interbtc-clients. All the modifications are licensed under the Apache License, Version 2.0.
+See the LICENSE_PREMIUM_BOT file.</p>
+<h3 id="project-repository">Project Repository</h3>
+<p>https://github.com/Kint0Sens/interbtc-clients-cli
+The Premium BOT repository is a fork of the interlay/interbtc-clients. The PremiumBot code is available in the branch premium-bot-1.12.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/premium-bot-1.12.0)</p>
+<h3 id="video-presentation">Video presentation</h3>
+<p>https://youtu.be/_ZvEypJZYjQ</p>
+<h2 id="overview">Overview</h2>
+<p>The Premium BOT is composed of two binaries, the Redemer and the Issuer. They are supposed to be run in parallel.
+The Redeemer consumes KBTC[^1] and generates BTC when a vault offers premium redeems.
+The Issuer consumes BTC and refills the Redeemer KBTC balance by sending issue requests.</p>
+<p>The Premium BOT is written in Rust as an fork of the interbtc-clients repository of interlay.</p>
 <p align="left">
   <a>
-    <img alt="Premium BOT flowchart" src="media/redeemer.png">
+    <img alt="Premium BOT flowchart" src="file:///home/toto/interbtc/my-interbtc-clients-cli/media/premium_bot.png">
   </a>
-
-### The Issuer
-Tue purpose of the Issuer is to select a vault with issuable capacity and send issue request to it in order to consume BTC and fill the kBTC account of the Redeemer. The Issuer will repeat this as long as it has BTC Balance and as long as it finds a vault with some kBTC capacity. It will then be idle until its BTC balance is refilled again by the Redeemer.  
+</p><h3 id="the-redeemer">The Redeemer</h3>
+<p>The purpose of the Redeemer is to monitor vaults for Premium Redeem opportunities and then request premium redeems with as much of its kBTC balance as possible and transfer BTC in the Issuer's BTC Wallet.</p>
+<p>The Redeemer will monitor the active vaults until it finds a vault that offers Premium Redeem due to its collateralization level.
+Once found it will request a premium redeem of the maximum available amount (limited by the bot's own kBTC balance).
+Once the Redeemer has run out of kBTC balance it will stay idle until its balance is refilled and then it will resume searching for Premium Redeem Vaults.</p>
 <p align="left">
-  <a >
-    <img alt="Premium BOT flowchart" src="media/issuer.png">
+  <a>
+    <img alt="Premium BOT flowchart" src="file:///home/toto/interbtc/my-interbtc-clients-cli/media/redeemer.png">
   </a>
-
-
-### Typical Use case
-The use case of the Premium BOT is the following:
-
-A user provides an account on the Intrelay parachain (the BOT Interlay Account) with a certain amount of KBTC and some native KINT to pay for gas. Under ideal conditions the amount allocated need not be very large as the KBTC redeemed into BTC are supposed to return to the KBTC walled via the action of the Issuer.  
-
-## Technical details
-The Premium Bot is composed of two command line binaries. It is written in Rust as a fork of the interlay/interbtc-clients repository.
-It uses some of the extrinsics and rpc functions provided in the runtime/rpc library of interbtc-clients, but we also needed to add some new rpc calls like get_premium_redeem_vaults.
-
-To interact with the Bitcoin network we used the Bitcoin Dev Kit[^2] libraries that provide tools to generate an in memory BTC wallet and to sent BTC transactions.
- 
-## Issues and possible next steps
-Due to lack of time, some issues have been identified but not yet resolved. There are also some ideas to improve the Premium BOT.
-- **Create a 'personalized' BTC wallet**
-In the current release the bitcoin walllet created when running the PremiumBOT is always called "PremiumBotWallet-master".
-In a future release, the name of the Bot Walled will be linked to the address of the parachain account stored in the keyfile.json
-
-- **Include an integration test to simulate Premium Vaults.** Without an integration/mockup setup, it is not possible to completely test the Premium BOT as it requires vaults to be in Premium Redeem state. To mitigate this, we added an option to the Redeemer that will consider all vaults, with their redeemable capacity as Premium.
-
-- **Include some external logging / alerting mechanism** This would be useful for the bot operator to be informed of the activty of the bot.
-
-- **Do not display bitcoin core RPC user and password** We initially followed the same approach as with vaults, where the Bitcoin Core RPC user and password are part of the command line options. IN a future version we will configure a json file with the user and password.
-
-- **Define default rpc url in the code** In the current release the **--bitcoin-rpc-url** parameter is mandatory. A future release would define the default url in the code (different values based on the testnet/kintsugi build) and make **--bitcoin-rpc-url** optional. 
-
-
-## How to build
-Please read the prerequisites provided in the README_interlay.md file about how to build the interbtc-clients repository. Building the Premium BOT repository uses exactly the same process. You only need to select the correct branch.
-
-At the time of release of the project (20/6/2022) the main branch on Testnet and Kintsugi is 1.12.0 
-The corresponding Premium BOT branch is premium-bot-1.12.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/premium-bot-1.12.0).
-
-In the root of the repository you will find 3 build scripts. They call cargo build --release with the appropriate feature (testnet/kintsugi or interlay) + specify a distinct target directory. For instance the build_kintsugi script is
-```
-cargo build --release  --features parachain-metadata-kintsugi --target-dir ./target/kintsugi
-```
-
-## Running the Issuer:
-The examples here are for testnet. Adapt the path to the binary for the kintsugi network
-```
-./target/testnet/release/issuer
-```
-
-Command options and flags:
-
-**-v, --verbose**
-
-Returns a verbose log
-
-**--vault-account-id <VAULT_ACCOUNT_ID>**
-
-By default the Issuer will select a vault with sufficient capacity. For testing purposes, or in case the Bot is linked to a vault account that is set to accept only its own accounts requests (set to inactive), the user might prefer to explicitely specify the target vault with this option.
-
-**--sleeptime-main-loop <SLEEPTIME_MAIN_LOOP>**
-
-**--sleeptime-no-issuable-vault <SLEEPTIME_NO_ISSUABLE_VAULT>**
-
-**--sleeptime-not-enough-btc <SLEEPTIME_NOT_ENOUGH_BTC>**
-
-**--sleeptime-wait-for-btc-transfer <SLEEPTIME_WAIT_FOR_BTC_TRANSFER>**
-
-By default the Issuer will pause 15 seconds after every loop and after determining that its BTC balance is insufficient or that no eligible vault is available.
+</p><h3 id="the-issuer">The Issuer</h3>
+<p>Tue purpose of the Issuer is to select a vault with issuable capacity and send issue request to it in order to consume BTC and fill the kBTC account of the Redeemer. The Issuer will repeat this as long as it has BTC Balance and as long as it finds a vault with some kBTC capacity. It will then be idle until its BTC balance is refilled again by the Redeemer.</p>
+<p align="left">
+  <a>
+    <img alt="Premium BOT flowchart" src="file:///home/toto/interbtc/my-interbtc-clients-cli/media/issuer.png">
+  </a>
+</p><h3 id="typical-use-case">Typical Use case</h3>
+<p>The use case of the Premium BOT is the following:</p>
+<p>A user provides an account on the Intrelay parachain (the BOT Interlay Account) with a certain amount of KBTC and some native KINT to pay for gas. Under ideal conditions the amount allocated need not be very large as the KBTC redeemed into BTC are supposed to return to the KBTC walled via the action of the Issuer.</p>
+<h2 id="technical-details">Technical details</h2>
+<p>The Premium Bot is composed of two command line binaries. It is written in Rust as a fork of the interlay/interbtc-clients repository.
+It uses some of the extrinsics and rpc functions provided in the runtime/rpc library of interbtc-clients, but we also needed to add some new rpc calls like get_premium_redeem_vaults.</p>
+<p>To interact with the Bitcoin network we used the Bitcoin Dev Kit[^2] libraries that provide tools to generate an in memory BTC wallet and to sent BTC transactions.</p>
+<h2 id="issues-and-possible-next-steps">Issues and possible next steps</h2>
+<p>Due to lack of time, some issues have been identified but not yet resolved. There are also some ideas to improve the Premium BOT.</p>
+<ul>
+<li>
+<p><strong>Create a 'personalized' BTC wallet</strong>
+In the current release the bitcoin walllet created when running the PremiumBOT is always called &quot;PremiumBotWallet-master&quot;.
+In a future release, the name of the Bot Walled will be linked to the address of the parachain account stored in the keyfile.json</p>
+</li>
+<li>
+<p><strong>Include an integration test to simulate Premium Vaults.</strong> Without an integration/mockup setup, it is not possible to completely test the Premium BOT as it requires vaults to be in Premium Redeem state. To mitigate this, we added an option to the Redeemer that will consider all vaults, with their redeemable capacity as Premium.</p>
+</li>
+<li>
+<p><strong>Include some external logging / alerting mechanism</strong> This would be useful for the bot operator to be informed of the activty of the bot.</p>
+</li>
+<li>
+<p><strong>Do not display bitcoin core RPC user and password</strong> We initially followed the same approach as with vaults, where the Bitcoin Core RPC user and password are part of the command line options. IN a future version we will configure a json file with the user and password.</p>
+</li>
+<li>
+<p><strong>Define default rpc url in the code</strong> In the current release the <strong>--bitcoin-rpc-url</strong> parameter is mandatory. A future release would define the default url in the code (different values based on the testnet/kintsugi build) and make <strong>--bitcoin-rpc-url</strong> optional.</p>
+</li>
+</ul>
+<h2 id="how-to-build">How to build</h2>
+<p>Please read the prerequisites provided in the README_interlay.md file about how to build the interbtc-clients repository. Building the Premium BOT repository uses exactly the same process. You only need to select the correct branch.</p>
+<p>At the time of release of the project (20/6/2022) the main branch on Testnet and Kintsugi is 1.12.0
+The corresponding Premium BOT branch is premium-bot-1.12.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/premium-bot-1.12.0).</p>
+<p>In the root of the repository you will find 3 build scripts. They call cargo build --release with the appropriate feature (testnet/kintsugi or interlay) + specify a distinct target directory. For instance the build_kintsugi script is</p>
+<pre class="hljs"><code><div>cargo build --release  --features parachain-metadata-kintsugi --target-dir ./target/kintsugi
+</div></code></pre>
+<h2 id="running-the-issuer">Running the Issuer:</h2>
+<p>The examples here are for testnet. Adapt the path to the binary for the kintsugi network</p>
+<pre class="hljs"><code><div>./target/testnet/release/issuer
+</div></code></pre>
+<p>Command options and flags:</p>
+<p><strong>-v, --verbose</strong></p>
+<p>Returns a verbose log</p>
+<p><strong>--vault-account-id &lt;VAULT_ACCOUNT_ID&gt;</strong></p>
+<p>By default the Issuer will select a vault with sufficient capacity. For testing purposes, or in case the Bot is linked to a vault account that is set to accept only its own accounts requests (set to inactive), the user might prefer to explicitely specify the target vault with this option.</p>
+<p><strong>--sleeptime-main-loop &lt;SLEEPTIME_MAIN_LOOP&gt;</strong></p>
+<p><strong>--sleeptime-no-issuable-vault &lt;SLEEPTIME_NO_ISSUABLE_VAULT&gt;</strong></p>
+<p><strong>--sleeptime-not-enough-btc &lt;SLEEPTIME_NOT_ENOUGH_BTC&gt;</strong></p>
+<p><strong>--sleeptime-wait-for-btc-transfer &lt;SLEEPTIME_WAIT_FOR_BTC_TRANSFER&gt;</strong></p>
+<p>By default the Issuer will pause 15 seconds after every loop and after determining that its BTC balance is insufficient or that no eligible vault is available.
 The issuer will aslo check for BTC confirmations and wait 120 seconds between succesive checks.
-The above options allow the user to fine tune these idle times
-
-**--min-btc-balance <MIN_BTC_BALANCE>**
-The minimum amount in satoshis allowed for the Issuer to generate an issue request, must be greater than Bridge Fee + BTC Network Fee + BTC Dust Limit [default: 5000]
-
-**--max-issue-amount <MAX_ISSUE_AMOUNT>**
-The maximum amount in satoshis allowed for an individual issue request generated by the Issuer. The actual issue request will be max between this value and the greater available vault issuable capacity [default: 3000]
-
-**--min-issue-amount <MIN_ISSUE_AMOUNT>**
-
-
-**--wait-for-issued-kbtc**
-Issuer will pause after executing the BTC payment to wait for the KBTC to be minted by the vault. A check is done every <SLEEPTIME_MAIN_LOOP> seconds on the balance of the bot account on the parachain
-
-**--btc-network-confirmations**
-issuer will pause after sending the BTC transacton until **btc_network_confirmations** confirmations have been reached. If set to 0 no checks are done after the transfer of BTC. But balances on the account are still evaulated with at least 1 confirmation. 
-
-**-- keyfile <KEYFILE>**
-
-**-- keyname**
-
-The Redeemer and Issuer will read the Kintsugi account information from a json file.
-Unless specified in a commandline option, the issuer and redeemer binaries look for a file named **keyfile.json** in the current directory. 
-In the file the entry with the correct keyname is read. By default the keyname is **keyname**. You can override these defaults with a commandline option.
-
-
-
-This file should contain the Kintsugi account of the BOT. You should follow the same syntax as the keyfile for vault accounts[^3]. 
-### Example execution of the Issuer
-The below output is run with the default settings so no command option needed to be entered. It is a Interlay Testnet execution as mentionned in the log. The bitcoin core is accessed via localhost:18332. For the demo and the documentation we used user **premium** and password **botbotbot** as an example. You should define you own user/password.
-
-Command to run the Issuer:
-```
- ~/int/my-interbtc-clients-cli$ ./target/testnet/release/issuer \                            
+The above options allow the user to fine tune these idle times</p>
+<p><strong>--min-btc-balance &lt;MIN_BTC_BALANCE&gt;</strong>
+The minimum amount in satoshis allowed for the Issuer to generate an issue request, must be greater than Bridge Fee + BTC Network Fee + BTC Dust Limit [default: 5000]</p>
+<p><strong>--max-issue-amount &lt;MAX_ISSUE_AMOUNT&gt;</strong>
+The maximum amount in satoshis allowed for an individual issue request generated by the Issuer. The actual issue request will be max between this value and the greater available vault issuable capacity [default: 3000]</p>
+<p><strong>--min-issue-amount &lt;MIN_ISSUE_AMOUNT&gt;</strong></p>
+<p><strong>--wait-for-issued-kbtc</strong>
+Issuer will pause after executing the BTC payment to wait for the KBTC to be minted by the vault. A check is done every &lt;SLEEPTIME_MAIN_LOOP&gt; seconds on the balance of the bot account on the parachain</p>
+<p><strong>--btc-network-confirmations</strong>
+issuer will pause after sending the BTC transacton until <strong>btc_network_confirmations</strong> confirmations have been reached. If set to 0 no checks are done after the transfer of BTC. But balances on the account are still evaulated with at least 1 confirmation.</p>
+<p><strong>-- keyfile <KEYFILE></strong></p>
+<p><strong>-- keyname</strong></p>
+<p>The Redeemer and Issuer will read the Kintsugi account information from a json file.
+Unless specified in a commandline option, the issuer and redeemer binaries look for a file named <strong>keyfile.json</strong> in the current directory.
+In the file the entry with the correct keyname is read. By default the keyname is <strong>keyname</strong>. You can override these defaults with a commandline option.</p>
+<p>This file should contain the Kintsugi account of the BOT. You should follow the same syntax as the keyfile for vault accounts[^3].</p>
+<h3 id="example-execution-of-the-issuer">Example execution of the Issuer</h3>
+<p>The below output is run with the default settings so no command option needed to be entered. It is a Interlay Testnet execution as mentionned in the log. The bitcoin core is accessed via localhost:18332. For the demo and the documentation we used user <strong>premium</strong> and password <strong>botbotbot</strong> as an example. You should define you own user/password.</p>
+<p>Command to run the Issuer:</p>
+<pre class="hljs"><code><div> ~/int/my-interbtc-clients-cli$ ./target/testnet/release/issuer \                            
   --bitcoin-rpc-url http://localhost:18332 \
   --bitcoin-rpc-user premium \
   --bitcoin-rpc-pass botbotbot
-```
-
-Output
-```
-[2022-06-11T15:55:07Z INFO  issuer] Connected to Interlay Testnet parachain
+</div></code></pre>
+<p>Output</p>
+<pre class="hljs"><code><div>[2022-06-11T15:55:07Z INFO  issuer] Connected to Interlay Testnet parachain
 [2022-06-11T15:55:07Z INFO  issuer] -------------------------------
 [2022-06-11T15:55:07Z INFO  issuer] Connected to bitcoin Testnet network
 [2022-06-11T15:55:07Z INFO  issuer] -------------------------------
@@ -243,16 +580,16 @@ Output
 [2022-06-11T16:17:55Z INFO  issuer] Transaction sent. TxID: b6a5e01fa6dcbac4b08f972e308035b4f342c5c845fdbaf4e12c4170814690a9
 [2022-06-11T16:17:55Z INFO  issuer] Not waiting for parachain KBTC issue confirmation. KBTC balance and delta migth be incorrect
 [2022-06-11T16:17:55Z INFO  issuer] Waiting for 1 confirmations on bitcoin testnet network
-``` 
-
-### Example execution of the Issuer on Kintsugi chain
-> ./target/kintsugi/release/issuer \
-  --bitcoin-rpc-url http://localhost:8332 \
-  --bitcoin-rpc-user premium \
-  --bitcoin-rpc-pass botbotbot  \
-  --keyfile ../kintsugi_bot_test/keyfile.json \
-  --max-issue-amount 100000 \
-  --sleeptime-not-enough-btc 200
+</div></code></pre>
+<h3 id="example-execution-of-the-issuer-on-kintsugi-chain">Example execution of the Issuer on Kintsugi chain</h3>
+<blockquote>
+<p>./target/kintsugi/release/issuer <br>
+--bitcoin-rpc-url http://localhost:8332 <br>
+--bitcoin-rpc-user premium <br>
+--bitcoin-rpc-pass botbotbot  <br>
+--keyfile ../kintsugi_bot_test/keyfile.json <br>
+--max-issue-amount 100000 <br>
+--sleeptime-not-enough-btc 200
 [2022-06-16T04:55:00Z INFO  issuer] Connected to Kintsugi parachain
 [2022-06-16T04:55:00Z INFO  issuer] -------------------------------
 [2022-06-16T04:55:00Z INFO  issuer] Connected to bitcoin Bitcoin network
@@ -328,63 +665,39 @@ Output
 [2022-06-16T05:29:07Z INFO  issuer] [9]-------------------------------
 [2022-06-16T05:29:07Z WARN  issuer] Insufficient BTC balance:   5771 BTC sat
 [2022-06-16T05:29:07Z INFO  issuer] Waiting 200 seconds before checking again
-[2022-06-16T05:32:40Z INFO  issuer] [10]-------------------------------
-
-
-## Running the Redeemer:
-```
-./target/release/redeemer --btc-address <BTC_ADDRESS>
-```
-
-Command options and flags:
-
-**-v, --verbose**
-
-Returns a verbose log
-
-**--treat-all-vaults-as-premium**
-
-This option is provided in order to test the Redeemer in a situation where no Premium Redeem vault exists. It will consider each vault as Premium Redeem.
-
-**--sleeptime-main-loop <SLEEPTIME_MAIN_LOOP>**
-
-**--sleeptime-no-premium-vault <SLEEPTIME_NO_PREMIUM_VAULT>>**
-
-**--sleeptime-not-enough-balance <SLEEPTIME_NOT_ENOUGH_BALANCE>**
-
-By default the Issuer will pause 15 seconds after every loop and after determining that its KBTC balance is insufficient or that no eligible vault is available.
-The above options allow the user to fine tune these idle times
-
-**--min-wrapped-balance <MIN_WRAPPED_BALANCE>**
-
-The minimum required KBTC wallet balance in sat for the Redeemer to request a redeem [default: 2000]
-
-**--max-redeem-amount <MAX_REDEEM_AMOUNT>**
-The maximum amount in satoshis allowed for an individual redeem request generated by the Redeemer. The issue request will be max between this value and the greater available vault issuable capacity [default: 3000]
-
-**--min-issue-amount <MIN_ISSUE_AMOUNT>**
-The minimum amount in satoshis allowed for the Issuer to generate an issue request, must be greater than Bridge Fee + BTC Network Fee + BTC Dust Limit [default: 2000]
-
-**-- keyfile <KEYFILE>**
-
-**-- keyname**
-
-The Redeemer and Issuer will read the Kintsugi account information from a json file.
-Unless specified in a commandline option, the Redeemer looks for this a file named keyfile.json in the current durectory. 
-In each file the entry with the correct keyname is read. By default the keyname is "keyname". You can override these defaults with a commandline option.
-
-*keyfile.json*
-
-This file should contain the Kintsugi account of the BOT. You should follow the same syntax as the keyfile for vault accounts[^3]. 
-
-
-### Example executions of the Redeemer
-The below output is run with the default settings, with the bitcoin RPC url, user and password specified. 
+[2022-06-16T05:32:40Z INFO  issuer] [10]-------------------------------</p>
+</blockquote>
+<h2 id="running-the-redeemer">Running the Redeemer:</h2>
+<pre class="hljs"><code><div>./target/release/redeemer --btc-address &lt;BTC_ADDRESS&gt;
+</div></code></pre>
+<p>Command options and flags:</p>
+<p><strong>-v, --verbose</strong></p>
+<p>Returns a verbose log</p>
+<p><strong>--treat-all-vaults-as-premium</strong></p>
+<p>This option is provided in order to test the Redeemer in a situation where no Premium Redeem vault exists. It will consider each vault as Premium Redeem.</p>
+<p><strong>--sleeptime-main-loop &lt;SLEEPTIME_MAIN_LOOP&gt;</strong></p>
+<p><strong>--sleeptime-no-premium-vault &lt;SLEEPTIME_NO_PREMIUM_VAULT&gt;&gt;</strong></p>
+<p><strong>--sleeptime-not-enough-balance &lt;SLEEPTIME_NOT_ENOUGH_BALANCE&gt;</strong></p>
+<p>By default the Issuer will pause 15 seconds after every loop and after determining that its KBTC balance is insufficient or that no eligible vault is available.
+The above options allow the user to fine tune these idle times</p>
+<p><strong>--min-wrapped-balance &lt;MIN_WRAPPED_BALANCE&gt;</strong></p>
+<p>The minimum required KBTC wallet balance in sat for the Redeemer to request a redeem [default: 2000]</p>
+<p><strong>--max-redeem-amount &lt;MAX_REDEEM_AMOUNT&gt;</strong>
+The maximum amount in satoshis allowed for an individual redeem request generated by the Redeemer. The issue request will be max between this value and the greater available vault issuable capacity [default: 3000]</p>
+<p><strong>--min-issue-amount &lt;MIN_ISSUE_AMOUNT&gt;</strong>
+The minimum amount in satoshis allowed for the Issuer to generate an issue request, must be greater than Bridge Fee + BTC Network Fee + BTC Dust Limit [default: 2000]</p>
+<p><strong>-- keyfile <KEYFILE></strong></p>
+<p><strong>-- keyname</strong></p>
+<p>The Redeemer and Issuer will read the Kintsugi account information from a json file.
+Unless specified in a commandline option, the Redeemer looks for this a file named keyfile.json in the current durectory.
+In each file the entry with the correct keyname is read. By default the keyname is &quot;keyname&quot;. You can override these defaults with a commandline option.</p>
+<p><em>keyfile.json</em></p>
+<p>This file should contain the Kintsugi account of the BOT. You should follow the same syntax as the keyfile for vault accounts[^3].</p>
+<h3 id="example-executions-of-the-redeemer">Example executions of the Redeemer</h3>
+<p>The below output is run with the default settings, with the bitcoin RPC url, user and password specified.
 As there are no Premium Redeem vaults available in the Testnet at the moment of the example, it will loop without redeeming.
-The example is run on the Interlay Testnet as mentionned in the log.
-
-```
- ~/int/my-interbtc-clients-cli │ premium-bot-1.12.0 !6  ./target/testnet/release/redeemer \                                            
+The example is run on the Interlay Testnet as mentionned in the log.</p>
+<pre class="hljs"><code><div> ~/int/my-interbtc-clients-cli │ premium-bot-1.12.0 !6  ./target/testnet/release/redeemer \                                            
   --bitcoin-rpc-url http://localhost:18332 \
   --bitcoin-rpc-user premium \
   --bitcoin-rpc-pass botbotbot          
@@ -410,14 +723,11 @@ The example is run on the Interlay Testnet as mentionned in the log.
 [2022-06-11T16:13:17Z INFO  redeemer] Sufficient KBTC balance to attempt premium redeems
 [2022-06-11T16:13:17Z WARN  redeemer] No premium redeem vault found
 [2022-06-11T16:13:17Z INFO  redeemer] Waiting 60 seconds before checking again
-```
-
-To observe the Redeemer actually sending redeem requests, we have added the option "--treat-all-vaults-as-premium".
+</div></code></pre>
+<p>To observe the Redeemer actually sending redeem requests, we have added the option &quot;--treat-all-vaults-as-premium&quot;.
 Here you can see that 4 redeems are performed on 4 different vaults (as all availabe issuable KBTC are treated as premium for testing purposes).
-After the 4th redeem, the issuable capacity is too low and the Redeemer does idle loops until later on another vault has enough capacity.
-
-```
- ~/int/my-interbtc-clients-cli │ premium-bot-1.12.0 !6  ./target/testnet/release/redeemer \                                                    --bitcoin-rpc-url http://localhost:18332 \
+After the 4th redeem, the issuable capacity is too low and the Redeemer does idle loops until later on another vault has enough capacity.</p>
+<pre class="hljs"><code><div> ~/int/my-interbtc-clients-cli │ premium-bot-1.12.0 !6  ./target/testnet/release/redeemer \                                                    --bitcoin-rpc-url http://localhost:18332 \
   --bitcoin-rpc-user premium \
   --bitcoin-rpc-pass botbotbot  \
   --treat-all-vaults-as-premium
@@ -537,17 +847,17 @@ After the 4th redeem, the issuable capacity is too low and the Redeemer does idl
 [2022-06-11T16:06:44Z INFO  redeemer] Found vault 5H6MkGXDz3f1BYQx3DcfjBs3i4cHixAKzh221aXd7V45ojeN with capacity 125
 [2022-06-11T16:06:44Z INFO  redeemer] Redeem request amount  125 KBTC Sat is below dust level
 [2022-06-11T16:06:44Z INFO  redeemer] Waiting 60 seconds before checking again
-``` 
-### Example executions of the Redeemer on the Kintsugi network
-
-Below we execute the Redeemer on the Kintsugi network. No Premium Vaults are available
-> ./target/kintsugi/release/redeemer \
-  --bitcoin-rpc-url http://localhost:8332 \
-  --bitcoin-rpc-user premium \
-  --bitcoin-rpc-pass botbotbot  \
-  --max-redeem-amount 100000 \
-  --sleeptime-not-enough-balance 200 \
-  --keyfile ../kintsugi_bot_test/keyfile.json
+</div></code></pre>
+<h3 id="example-executions-of-the-redeemer-on-the-kintsugi-network">Example executions of the Redeemer on the Kintsugi network</h3>
+<p>Below we execute the Redeemer on the Kintsugi network. No Premium Vaults are available</p>
+<blockquote>
+<p>./target/kintsugi/release/redeemer <br>
+--bitcoin-rpc-url http://localhost:8332 <br>
+--bitcoin-rpc-user premium <br>
+--bitcoin-rpc-pass botbotbot  <br>
+--max-redeem-amount 100000 <br>
+--sleeptime-not-enough-balance 200 <br>
+--keyfile ../kintsugi_bot_test/keyfile.json
 [2022-06-16T04:50:36Z INFO  redeemer] Connected to Kintsugi parachain
 [2022-06-16T04:50:36Z INFO  redeemer] -------------------------------
 [2022-06-16T04:50:40Z INFO  redeemer] Connected to bitcoin Bitcoin network
@@ -566,18 +876,18 @@ Below we execute the Redeemer on the Kintsugi network. No Premium Vaults are ava
 [2022-06-16T04:50:40Z WARN  redeemer] No premium redeem vault found
 [2022-06-16T04:50:40Z INFO  redeemer] Waiting 60 seconds before checking again
 [2022-06-16T04:51:41Z INFO  redeemer] [2]-------------------------------
-[2022-06-16T04:51:41Z INFO  redeemer] Max KBTC redeem amount for this iteration: 40908
-
-We then test the "treat all vaults as premium" option to confirm that redeems work
-
-> ./target/kintsugi/release/redeemer \
-  --bitcoin-rpc-url http://localhost:8332 \
-  --bitcoin-rpc-user premium \
-  --bitcoin-rpc-pass botbotbot  \
-  --max-redeem-amount 100000 \
-  --sleeptime-not-enough-balance 200 \
-  --keyfile ../kintsugi_bot_test/keyfile.json \
-  --treat-all-vaults-as-premium
+[2022-06-16T04:51:41Z INFO  redeemer] Max KBTC redeem amount for this iteration: 40908</p>
+</blockquote>
+<p>We then test the &quot;treat all vaults as premium&quot; option to confirm that redeems work</p>
+<blockquote>
+<p>./target/kintsugi/release/redeemer <br>
+--bitcoin-rpc-url http://localhost:8332 <br>
+--bitcoin-rpc-user premium <br>
+--bitcoin-rpc-pass botbotbot  <br>
+--max-redeem-amount 100000 <br>
+--sleeptime-not-enough-balance 200 <br>
+--keyfile ../kintsugi_bot_test/keyfile.json <br>
+--treat-all-vaults-as-premium
 [2022-06-16T04:52:16Z INFO  redeemer] Connected to Kintsugi parachain
 [2022-06-16T04:52:16Z INFO  redeemer] -------------------------------
 [2022-06-16T04:52:17Z INFO  redeemer] Connected to bitcoin Bitcoin network
@@ -611,13 +921,12 @@ We then test the "treat all vaults as premium" option to confirm that redeems wo
 [2022-06-16T04:53:20Z INFO  redeemer] [2]-------------------------------
 [2022-06-16T04:53:20Z INFO  redeemer] Max KBTC redeem amount for this iteration: 0
 [2022-06-16T04:53:20Z WARN  redeemer] KBTC balance (or max redeem amount) lower than minimum balance of 5000  Sat
-[2022-06-16T04:53:20Z INFO  redeemer] Waiting 200 seconds before checking again
-
-
-
-
-[^1]: We refer here to a Kintsugi Parachain, but the Premium BOT will work similarly in a Testnet or Interlay network. Just replace the Kintsugi, KBTC, KINT, KSM terms accordingly.
+[2022-06-16T04:53:20Z INFO  redeemer] Waiting 200 seconds before checking again</p>
+</blockquote>
+<p>[^1]: We refer here to a Kintsugi Parachain, but the Premium BOT will work similarly in a Testnet or Interlay network. Just replace the Kintsugi, KBTC, KINT, KSM terms accordingly.
 [^2]: https://bitcoindevkit.org/
 [^3]: See https://docs.interlay.io/#/vault/installation?id=prerequisites
-[^4]: The extended master private key mentionned here is the actual key used on BTC Testnet to test the BOT during development. You can reuse it to confirm the BOT runs correctly. 
+[^4]: The extended master private key mentionned here is the actual key used on BTC Testnet to test the BOT during development. You can reuse it to confirm the BOT runs correctly.</p>
 
+</body>
+</html>
