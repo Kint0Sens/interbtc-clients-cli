@@ -1,28 +1,28 @@
 # Premium BOT
 ## by Kint0Sens
  part of the TRADING/ARBITRAGE BOTS bounty (https://github.com/interlay/bounties/issues/2)
-
+Contact: Discord Kint0Sens#9101
 
 <!-- TOC -->
 
 - [Premium BOT](#premium-bot)
-    - [by Kint0Sens](#by-kint0sens)
-        - [License](#license)
-        - [Project Repository](#project-repository)
-        - [Video presentation](#video-presentation)
-    - [Overview](#overview)
-        - [The Redeemer](#the-redeemer)
-        - [The Issuer](#the-issuer)
-        - [Typical Use case](#typical-use-case)
-    - [Technical details](#technical-details)
-    - [Issues and possible next steps](#issues-and-possible-next-steps)
-    - [How to build](#how-to-build)
-    - [Running the Issuer:](#running-the-issuer)
-        - [Example execution of the Issuer](#example-execution-of-the-issuer)
-        - [Example execution of the Issuer on Kintsugi chain](#example-execution-of-the-issuer-on-kintsugi-chain)
-    - [Running the Redeemer:](#running-the-redeemer)
-        - [Example executions of the Redeemer](#example-executions-of-the-redeemer)
-        - [Example executions of the Redeemer on the Kintsugi network](#example-executions-of-the-redeemer-on-the-kintsugi-network)
+  - [by Kint0Sens](#by-kint0sens)
+    - [License](#license)
+    - [Project Repository](#project-repository)
+    - [Video presentation](#video-presentation)
+  - [Overview](#overview)
+    - [The Redeemer](#the-redeemer)
+    - [The Issuer](#the-issuer)
+    - [Typical Use case](#typical-use-case)
+  - [Technical details](#technical-details)
+  - [Issues and possible next steps](#issues-and-possible-next-steps)
+  - [How to build](#how-to-build)
+  - [Running the Issuer:](#running-the-issuer)
+    - [Example execution of the Issuer](#example-execution-of-the-issuer)
+    - [Example execution of the Issuer on Kintsugi chain](#example-execution-of-the-issuer-on-kintsugi-chain)
+  - [Running the Redeemer:](#running-the-redeemer)
+    - [Example executions of the Redeemer](#example-executions-of-the-redeemer)
+    - [Example executions of the Redeemer on the Kintsugi network](#example-executions-of-the-redeemer-on-the-kintsugi-network)
 
 <!-- /TOC -->
 
