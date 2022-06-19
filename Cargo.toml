@@ -9,7 +9,6 @@ members = [
   # "service",
   "cli/explore",
   "cli/redeem",
-  "cli/redeem2",
   "cli/burn",
   "cli/transfer",
   "cli/issue",
