@@ -20,7 +20,7 @@ See the LICENSE_PREMIUM_BOT file.
 https://github.com/Kint0Sens/interbtc-clients-cli
 The Premium BOT repository is a fork of the interlay/interbtc-clients. The PremiumBot code is available in the branch cli-1.12.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/cli-1.12.0)
 ### Video presentation
-
+https://youtu.be/5Iw7rOLqCpQ
 ## Overview
 I started the current project as a way to introduce myself to rust programming and the substrate exosystem. When I reviewed the design of the interbtc-clients repository that generates the Interbtc vault program I realized that it is a rust client to the Interbtc Parachain. I started using the functions exposed in the rpc.rs file in the runtime of the package to make calls to the Interbtc parachain. I managed to build the explore command that way. 
 I did the same to desing a basic issue and redeem. 
