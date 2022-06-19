@@ -24,6 +24,8 @@ const CONFIRMATION_TARGET: u32 = 1;
 const BTC_DECIMALS: u32 = 8;
 const BTC_CURRENCY: &str = "btc";
 
+const COINGECKO_API_KEY_PARAMETER: &str = "x_cg_pro_api_key";
+
 async fn get_exchange_rate_from_coingecko(currency_id: CurrencyId, url: &Url) -> Result<FixedU128, Error> {
     // https://www.coingecko.com/api/documentations/v3
     let resp = reqwest::get(url.clone())
@@ -31,8 +33,9 @@ async fn get_exchange_rate_from_coingecko(currency_id: CurrencyId, url: &Url) ->
         .json::<HashMap<String, HashMap<String, f64>>>()
         .await?;
 
+    let currency_name = currency_id.inner()?.name().to_lowercase();
     let exchange_rate = *resp
-        .get(&currency_id.inner().name().to_lowercase())
+        .get(&currency_name)
         .ok_or(Error::InvalidResponse)?
         .get(BTC_CURRENCY)
         .ok_or(Error::InvalidResponse)?;
@@ -90,6 +93,10 @@ struct Opts {
     /// Fetch the exchange rate from CoinGecko (https://api.coingecko.com/api/v3/).
     #[clap(long, conflicts_with("exchange-rate"))]
     coingecko: Option<Url>,
+
+    /// Use a dedicated API key for coingecko pro URL (https://pro-api.coingecko.com/api/v3/)
+    #[clap(long, conflicts_with("exchange-rate"))]
+    coingecko_api_key: Option<String>,
 
     /// Timeout in milliseconds to wait for connection to btc-parachain.
     #[clap(long, parse(try_from_str = parse_duration_ms), default_value = "60000")]
@@ -190,22 +197,30 @@ async fn main() -> Result<(), Error> {
         None
     };
 
-    let exchange_rates_to_set: Vec<_> = match (opts.currency_id, opts.exchange_rate, opts.coingecko) {
-        (currencies, exchange_rates, None) if currencies.len() == exchange_rates.len() => currencies
+    let exchange_rates_to_set: Vec<_> = match (
+        opts.currency_id,
+        opts.exchange_rate,
+        opts.coingecko,
+        opts.coingecko_api_key,
+    ) {
+        (currencies, exchange_rates, None, None) if currencies.len() == exchange_rates.len() => currencies
             .iter()
             .zip(exchange_rates)
             .map(|(currency_id, exchange_rate)| (*currency_id, UrlOrDefault::Def(exchange_rate)))
             .collect(),
-        (currencies, exchange_rates, Some(url)) if exchange_rates.is_empty() => currencies
+        (currencies, exchange_rates, Some(url), maybe_api_key) if exchange_rates.is_empty() => currencies
             .iter()
             .map(|currency_id| {
                 let mut url = url.clone();
                 url.set_path(&format!("{}/simple/price", url.path()));
                 url.set_query(Some(&format!(
                     "ids={}&vs_currencies={}",
-                    currency_id.inner().name().to_lowercase(),
+                    currency_id.inner().unwrap().name().to_lowercase(),
                     BTC_CURRENCY
                 )));
+                if let Some(api_key) = &maybe_api_key {
+                    url.query_pairs_mut().append_pair(COINGECKO_API_KEY_PARAMETER, &api_key);
+                }
                 (*currency_id, UrlOrDefault::Url(url))
             })
             .collect(),
@@ -220,7 +235,7 @@ async fn main() -> Result<(), Error> {
         .into_iter()
         .map(|(currency_id, value)| {
             let conversion_factor = FixedU128::checked_from_rational(
-                10_u128.pow(currency_id.inner().decimals() as u32),
+                10_u128.pow(currency_id.inner().unwrap().decimals() as u32),
                 10_u128.pow(BTC_DECIMALS),
             )
             .unwrap();
