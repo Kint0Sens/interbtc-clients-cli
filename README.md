@@ -14,11 +14,11 @@ The purpose of this project is to develop a suite of command line executables th
 - burn
 
 This project is a fork of the interlay/interbtc-clients. All the modifications are licensed under the Apache License, Version 2.0. 
-See the LICENSE_PREMIUM_BOT file.
+See the LICENSE_CLI file.
 
 ### Project Repository
 https://github.com/Kint0Sens/interbtc-clients-cli
-The Premium BOT repository is a fork of the interlay/interbtc-clients. The PremiumBot code is available in the branch cli-1.12.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/cli-1.12.0)
+The Command Line Tools repository is a fork of the interlay/interbtc-clients. The Command Line Tooks code is available in the branch cli-1.12.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/cli-1.12.0)
 ### Video presentation
 https://youtu.be/5Iw7rOLqCpQ
 ## Overview
@@ -93,7 +93,7 @@ Example connection parameters
 Currently the issue command interacts with a wallet named "InterbtcCLIWallet-master".
 To manually load the wallet, check its balance or get a new btc address to transfer funds use the following commands
 ```
-curl --data-binary '{"jsonrpc": "1.0", "id":"curltext", "method": "loadwallet", "params": ["PremiumBotWallet-master"]}' -H 'content-type: text/plain;' http://useruseruser:passpasspass@127.0.0.1:18332/
+curl --data-binary '{"jsonrpc": "1.0", "id":"curltext", "method": "loadwallet", "params": ["InterbtcCLIWallet-master"]}' -H 'content-type: text/plain;' http://useruseruser:passpasspass@127.0.0.1:18332/
 curl --data-binary '{"jsonrpc": "1.0", "id":"curltest", "method": "getbalance", "params": ["*", 6] }' -H 'content-type: text/plain;' http://useruseruser:passpasspass@127.0.0.1:18332/
 curl --data-binary '{"jsonrpc": "1.0", "id":"curltest", "method": "getnewaddress", "params": [] }' -H 'content-type: text/plain;' http://useruseruser:passpasspass@127.0.0.1:18332/
 ```
@@ -110,7 +110,7 @@ curl --data-binary '{"jsonrpc": "1.0", "id":"curltest", "method": "getnewaddress
 Please read the prerequisites provided in the README_interlay.md file about how to build the interbtc-clients repository. Building the Premium BOT repository uses exactly the same process. You only need to select the correct branch.
 
 At the time of release of the project (20/6/2022) the main branch on Testnet and Kintsugi is 1.12.0 
-The corresponding Premium BOT branch is premium-bot-1.12.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/cli-1.12.0).
+The corresponding Command Line Tool branch is cli1.12.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/cli-1.12.0).
 
 In the root of the repository you will find 3 build scripts. They call cargo build --release with the appropriate feature (testnet/kintsugi or interlay) + specify a distinct target directory. For instance the build_kintsugi script is
 ```
