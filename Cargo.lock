@@ -90,7 +90,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -483,7 +483,7 @@ version = "1.1.0"
 dependencies = [
  "async-trait",
  "backoff",
- "bitcoin 1.2.0",
+ "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "bitcoincore-rpc",
  "clap",
  "esplora-btc-api",
@@ -507,6 +507,25 @@ dependencies = [
 name = "bitcoin"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
+dependencies = [
+ "bitcoin_hashes 0.7.6",
+ "frame-support",
+ "hex",
+ "impl-serde",
+ "parity-scale-codec",
+ "scale-info",
+ "secp256k1 0.20.1",
+ "serde",
+ "sha2 0.8.2",
+ "sp-core",
+ "sp-std",
+ "spin 0.7.1",
+]
+
+[[package]]
+name = "bitcoin"
+version = "1.2.0"
+source = "git+https://github.com/interlay/interbtc?rev=9bb83764669fed277a218e6a82876eb7f9028a94#9bb83764669fed277a218e6a82876eb7f9028a94"
 dependencies = [
  "bitcoin_hashes 0.7.6",
  "frame-support",
@@ -717,7 +736,7 @@ name = "btc-relay"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0",
+ "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -756,6 +775,22 @@ name = "bumpalo"
 version = "3.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37ccbd214614c6783386c1af30caf03192f17891059cecc394b4fb119e363de3"
+
+[[package]]
+name = "burn"
+version = "0.0.2"
+dependencies = [
+ "bitcoin 1.1.0",
+ "clap",
+ "common",
+ "env_logger 0.9.0",
+ "git-version",
+ "log 0.4.17",
+ "runtime",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "byte-slice-cast"
@@ -993,6 +1028,31 @@ dependencies = [
  "strum",
  "strum_macros",
  "unicode-width",
+]
+
+[[package]]
+name = "common"
+version = "0.0.2"
+dependencies = [
+ "async-trait",
+ "bitcoin 1.1.0",
+ "bitcoin_hashes 0.7.6",
+ "bitcoincore-rpc",
+ "cfg-if 1.0.0",
+ "clap",
+ "env_logger 0.9.0",
+ "impl-serde",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=9bb83764669fed277a218e6a82876eb7f9028a94)",
+ "log 0.4.17",
+ "pad",
+ "runtime",
+ "secp256k1 0.20.1",
+ "serde",
+ "sha2 0.8.2",
+ "sp-std",
+ "spin 0.7.1",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -1293,7 +1353,7 @@ source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24
 dependencies = [
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "mocktopus",
  "orml-tokens",
  "orml-traits",
@@ -1773,7 +1833,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "parity-scale-codec",
  "reward",
  "scale-info",
@@ -1811,6 +1871,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e43f2f1833d64e33f15592464d6fdd70f349dda7b1a53088eb83cd94014008c5"
 dependencies = [
  "futures 0.3.21",
+]
+
+[[package]]
+name = "explore"
+version = "0.0.2"
+dependencies = [
+ "clap",
+ "common",
+ "env_logger 0.9.0",
+ "git-version",
+ "log 0.4.17",
+ "pad",
+ "runtime",
+ "tabular",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1876,7 +1953,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "parity-scale-codec",
  "reward",
  "scale-info",
@@ -2933,7 +3010,23 @@ name = "interbtc-primitives"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0",
+ "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "bstringify",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+ "xcm",
+]
+
+[[package]]
+name = "interbtc-primitives"
+version = "1.2.0"
+source = "git+https://github.com/interlay/interbtc?rev=9bb83764669fed277a218e6a82876eb7f9028a94#9bb83764669fed277a218e6a82876eb7f9028a94"
+dependencies = [
+ "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=9bb83764669fed277a218e6a82876eb7f9028a94)",
  "bstringify",
  "parity-scale-codec",
  "scale-info",
@@ -2950,7 +3043,7 @@ version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
  "futures 0.3.21",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "jsonrpsee 0.13.1",
  "module-btc-relay-rpc",
  "module-issue-rpc",
@@ -2990,8 +3083,8 @@ dependencies = [
  "frame-support",
  "frame-system",
  "frame-system-rpc-runtime-api",
- "interbtc-primitives",
- "issue",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "issue 1.2.0",
  "module-btc-relay-rpc-runtime-api",
  "module-issue-rpc-runtime-api",
  "module-oracle-rpc-runtime-api",
@@ -3024,7 +3117,7 @@ dependencies = [
  "pallet-treasury",
  "pallet-utility",
  "parity-scale-codec",
- "redeem",
+ "redeem 1.2.0",
  "refund",
  "relay",
  "replace",
@@ -3057,13 +3150,13 @@ name = "interbtc-standalone"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0",
+ "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "clap",
  "frame-benchmarking",
  "frame-benchmarking-cli",
  "frame-support",
  "hex-literal",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "interbtc-rpc",
  "interbtc-runtime-standalone",
  "log 0.4.17",
@@ -3130,17 +3223,34 @@ checksum = "879d54834c8c76457ef4293a689b2a8c59b076067ad77b15efafbb05f92a592b"
 
 [[package]]
 name = "issue"
+version = "0.0.2"
+dependencies = [
+ "bitcoin 0.27.1",
+ "bitcoin 1.1.0",
+ "clap",
+ "common",
+ "env_logger 0.9.0",
+ "git-version",
+ "log 0.4.17",
+ "runtime",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "issue"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0",
+ "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "btc-relay",
  "currency",
  "fee",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "oracle 1.2.0",
  "orml-tokens",
  "orml-traits",
@@ -5058,7 +5168,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "oracle 1.2.0",
  "orml-tokens",
  "orml-traits",
@@ -5321,7 +5431,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "pallet-timestamp",
  "parity-scale-codec",
  "scale-info",
@@ -5428,6 +5538,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ff55baddef9e4ad00f88b6c743a2a8062d4c6ade126c2a528644b8e444d52ce"
 dependencies = [
  "stable_deref_trait",
+]
+
+[[package]]
+name = "pad"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2ad9b889f1b12e0b9ee24db044b5129150d5eada288edc800f789928dc8c0e3"
+dependencies = [
+ "unicode-width",
 ]
 
 [[package]]
@@ -6641,17 +6760,33 @@ dependencies = [
 
 [[package]]
 name = "redeem"
+version = "0.0.2"
+dependencies = [
+ "bitcoin 1.1.0",
+ "clap",
+ "common",
+ "env_logger 0.9.0",
+ "git-version",
+ "log 0.4.17",
+ "runtime",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "redeem"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0",
+ "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "btc-relay",
  "currency",
  "fee",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "oracle 1.2.0",
  "orml-tokens",
  "orml-traits",
@@ -6713,14 +6848,14 @@ name = "refund"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0",
+ "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "btc-relay",
  "currency",
  "fee",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "oracle 1.2.0",
  "orml-tokens",
  "orml-traits",
@@ -6791,20 +6926,20 @@ name = "relay"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0",
+ "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "btc-relay",
  "currency",
  "fee",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "nomination",
  "oracle 1.2.0",
  "orml-tokens",
  "orml-traits",
  "parity-scale-codec",
- "redeem",
+ "redeem 1.2.0",
  "refund",
  "replace",
  "scale-info",
@@ -6832,14 +6967,14 @@ name = "replace"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0",
+ "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "btc-relay",
  "currency",
  "fee",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "nomination",
  "oracle 1.2.0",
  "orml-tokens",
@@ -6919,7 +7054,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -6998,14 +7133,14 @@ dependencies = [
  "async-trait",
  "backoff",
  "bitcoin 1.1.0",
- "bitcoin 1.2.0",
+ "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "btc-relay",
  "cfg-if 1.0.0",
  "clap",
  "env_logger 0.8.4",
  "frame-support",
  "futures 0.3.21",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "interbtc-standalone",
  "jsonrpsee 0.10.1",
  "log 0.4.17",
@@ -9324,7 +9459,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "orml-tokens",
  "orml-traits",
  "parity-scale-codec",
@@ -9549,7 +9684,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -9601,6 +9736,15 @@ checksum = "a75fb188eb626b924683e3b95e3a48e63551fcfb51949de2f06a9d91dbee93c9"
 dependencies = [
  "core-foundation-sys",
  "libc",
+]
+
+[[package]]
+name = "tabular"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9a2882c514780a1973df90de9d68adcd8871bacc9a6331c3f28e6d2ff91a3d1"
+dependencies = [
+ "unicode-width",
 ]
 
 [[package]]
@@ -9987,6 +10131,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 
 [[package]]
+name = "transfer"
+version = "0.0.1"
+dependencies = [
+ "bitcoin 1.1.0",
+ "clap",
+ "common",
+ "env_logger 0.9.0",
+ "git-version",
+ "log 0.4.17",
+ "runtime",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "trie-db"
 version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10299,14 +10459,14 @@ name = "vault-registry"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0",
+ "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "currency",
  "fee",
  "fixed-hash",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives",
+ "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
  "log 0.4.17",
  "oracle 1.2.0",
  "orml-tokens",

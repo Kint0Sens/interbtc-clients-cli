@@ -1,0 +1,2 @@
+#!/bin/sh
+cargo build --release  --features parachain-metadata-interlay-testnet --target-dir ./target/interlay-testnet
