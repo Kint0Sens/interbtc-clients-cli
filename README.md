@@ -1,368 +1,623 @@
-# Command line tools for vault operators and Kintsugi users
+# Premium BOT
 ## by Kint0Sens
+ part of the TRADING/ARBITRAGE BOTS bounty (https://github.com/interlay/bounties/issues/2)
+Contact: Discord Kint0Sens#9101
 
-### part of the VAULT INTERFACE bounty (https://github.com/interlay/bounties/issues/1)
+<!-- TOC -->
+
+- [Premium BOT](#premium-bot)
+  - [by Kint0Sens](#by-kint0sens)
+    - [License](#license)
+    - [Project Repository](#project-repository)
+    - [Video presentation](#video-presentation)
+  - [Overview](#overview)
+    - [The Redeemer](#the-redeemer)
+    - [The Issuer](#the-issuer)
+    - [Typical Use case](#typical-use-case)
+  - [Technical details](#technical-details)
+  - [Issues and possible next steps](#issues-and-possible-next-steps)
+  - [How to build](#how-to-build)
+  - [Running the Issuer:](#running-the-issuer)
+    - [Example execution of the Issuer](#example-execution-of-the-issuer)
+    - [Example execution of the Issuer on Kintsugi chain](#example-execution-of-the-issuer-on-kintsugi-chain)
+  - [Running the Redeemer:](#running-the-redeemer)
+    - [Example executions of the Redeemer](#example-executions-of-the-redeemer)
+    - [Example executions of the Redeemer on the Kintsugi network](#example-executions-of-the-redeemer-on-the-kintsugi-network)
+
+<!-- /TOC -->
 
 ### License
 Copyright 2022 Kint@Sens
 
-The purpose of this project is to develop a suite of command line executables that will enable the user to interact with the Interbtc vaults. The current release for the AmsterDOT Hackathon contains the following command line tools:
-- explore (list vault info - retrieve Liquidation Vault data)
-- issue (combines request and btc payment)
-- redeem
-- transfer (KSM) to Relay Chain
-- burn
-
-This project is a fork of the interlay/interbtc-clients. All the modifications are licensed under the Apache License, Version 2.0. 
+The Premium BOT repository is a fork of the interlay/interbtc-clients. All the modifications are licensed under the Apache License, Version 2.0. 
 See the LICENSE_PREMIUM_BOT file.
 
 ### Project Repository
-https://github.com/Kint0Sens/interbtc-clients-cli# Command line tools for vault operators and Kintsugi users
-## by Kint0Sens
-
-### part of the VAULT INTERFACE bounty (https://github.com/interlay/bounties/issues/1)
-
-### License
-Copyright 2022 Kint@Sens
-
-The purpose of this project is to develop a suite of command line executables that will enable the user to interact with the Interbtc vaults. The current release for the AmsterDOT Hackathon contains the following command line tools:
-- explore (list vault info - retrieve Liquidation Vault data)
-- issue (combines request and btc payment)
-- redeem
-- transfer (KSM) to Relay Chain
-- burn
-
-This project is a fork of the interlay/interbtc-clients. All the modifications are licensed under the Apache License, Version 2.0. 
-See the LICENSE_CLI file.
-
-### Project Repository
 https://github.com/Kint0Sens/interbtc-clients-cli
-The Command Line Tools repository is a fork of the interlay/interbtc-clients. The Command Line Tools code is available in the branch cli-1.14.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/cli-1.14.0)
+The Premium BOT repository is a fork of the interlay/interbtc-clients. The PremiumBot code is available in the branch premium-bot-1.14.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/premium-bot-1.14.0)
+
 ### Video presentation
-https://youtu.be/5Iw7rOLqCpQ
+
+https://youtu.be/_ZvEypJZYjQ
 ## Overview
-I started the current project as a way to introduce myself to rust programming and the substrate exosystem. When I reviewed the design of the interbtc-clients repository that generates the Interbtc vault program I realized that it is a rust client to the Interbtc Parachain. I started using the functions exposed in the rpc.rs file in the runtime of the package to make calls to the Interbtc parachain. I managed to build the explore command that way. 
-I did the same to desing a basic issue and redeem. 
-To then build the burn and transfer command I had to extend the rpc library with extra calls that have not been included in the original repository because they correspond to extrinsic calls that are not relevant to the vault operations.
+The Premium BOT is composed of two binaries, the Redemer and the Issuer. They are supposed to be run in parallel. 
+The Redeemer consumes KBTC[^1] and generates BTC when a vault offers premium redeems. 
+The Issuer consumes BTC and refills the Redeemer KBTC balance by sending issue requests.
 
-For the issue command, my original intent was to produce a command line tool that would both request the issue to a vault and then immediately generate a btc transaction from a wallet. I intitially explored the useage of the bdk crate (bitcoindevkit). That project contains many nice features and does not force you to run a bitcoin core node to hold your wallet. I however stopped using bdk because I ran into issues when I started running tests. Next option was to reverse engineer how the Interbtc team generates btc transactions to redeem bitcoins from the vault BTC account. By replicating those functions (that are in teh bitcoin crate of the interbtc-clients repository) I achieved my objective. The issue command line will generate or load a wallet similar to how the vault does when it is created. I can then send btcs to that wallet and then execute issues from it.
-
-### Explore command
-The purpose of the Explore tool is to retrieve information about the vaults. Currently the Explore tool offers two subcommands.
-- vaults
-- liquidation-vault
-
-The explore command is compatible with the recent introduction of KINT as collateral. See example execution below on Kintsugi where a KINT collateral vault is reported.
-
-The **vaults** subcommand will list all vaults of the network and give the following infos
-- status (Active, Liquidated, CommittedTheft), 
-- accepting issues/redeem
-- banned until
-- wrapped (current and pending) and Collateral balance
-- collateralization (current and pending)
-- issuable capacity
+The Premium BOT is written in Rust as an fork of the interbtc-clients repository of interlay. 
 
 
-The **liquidation-vault** subcommand returns information on the burnable tokens that have been centralised in the "liquidation vault"[^1] when theft or undercollateralization have been identified on some vaults.
-It also gives an estimate of the reward gained per burnt KSM.
-### Burn command
-The burn command will burn KBTC similar to what can be done in the UI. At the time of the AmsterDOT Hackathon release, there is some burnable amounts in Testnet and no burnable amounts in Kintsuki. So we test both a burn call with burnable amount present or not.
+<p align="left">
+  <a >
+    <img alt="Premium BOT flowchart" src="media/premium_bot.png">
+  </a>
 
-### Transfer command
-The transfer command issues a transfer call to the XToken palette of the Interbtc chain. It is configured to only transfer from the Interbtc parachain to the Relay Chain and only transfer the Relay Chain tokens. 
-We did not address the transfer from Relay Chain to the Interbtc chain as in the current release we are only interacting with the Interbtc server. A transfer from the Relay Chain requires a call to the Realy Chain (Kusame or Polkadot).
 
-The transfer command executes the transfer with the same sender/ receiver account by default unless a different destination address is provided 
+### The Redeemer
+The purpose of the Redeemer is to monitor vaults for Premium Redeem opportunities and then request premium redeems with as much of its kBTC balance as possible and transfer BTC in the Issuer's BTC Wallet.
 
-The command executes correctly in Testnet, but there seem to be some issue in the Kintsugi network that cause the connection to be closed when the request is sent.
-### Redeem command
+The Redeemer will monitor the active vaults until it finds a vault that offers Premium Redeem due to its collateralization level.
+Once found it will request a premium redeem of the maximum available amount (limited by the bot's own kBTC balance).
+Once the Redeemer has run out of kBTC balance it will stay idle until its balance is refilled and then it will resume searching for Premium Redeem Vaults.
+<p align="left">
+  <a>
+    <img alt="Premium BOT flowchart" src="media/redeemer.png">
+  </a>
 
-The redeem command will redeem the requested amount from the specified vault. The current release does not allow for a random selection of the vault. 
+### The Issuer
+Tue purpose of the Issuer is to select a vault with issuable capacity and send issue request to it in order to consume BTC and fill the kBTC account of the Redeemer. The Issuer will repeat this as long as it has BTC Balance and as long as it finds a vault with some kBTC capacity. It will then be idle until its BTC balance is refilled again by the Redeemer.  
+<p align="left">
+  <a >
+    <img alt="Premium BOT flowchart" src="media/issuer.png">
+  </a>
 
-### Issue command
 
-The issue command will first request an issue to the specified vault. Next it will emit a BTC payment from a BTC wallet. The BTC wallet needs to reside on a bitcoin core node just like a Vault btc wallet does. See the section below on "interacting with the BTC wallet".
+### Typical Use case
+The use case of the Premium BOT is the following:
+
+A user provides an account on the Intrelay parachain (the BOT Interlay Account) with a certain amount of KBTC and some native KINT to pay for gas. Under ideal conditions the amount allocated need not be very large as the KBTC redeemed into BTC are supposed to return to the KBTC walled via the action of the Issuer.  
 
 ## Technical details
+The Premium Bot is composed of two command line binaries. It is written in Rust as a fork of the interlay/interbtc-clients repository.
+It uses some of the extrinsics and rpc functions provided in the runtime/rpc library of interbtc-clients, but we also needed to add some new rpc calls like get_premium_redeem_vaults.
 
-### Interbtc account information
-For all commands that would need to access a Interbtc parachain account, you will need to provide the seed phrase in a file. By default the file read is keyfile.json in the current directory. The **keyfile** and **keyname** command line options let you change the default settings
-
-**-- keyfile <KEYFILE>**
-
-**-- keyname**
-
-Unless specified in a commandline option, the programs look for a file named **keyfile.json** in the current directory. 
-In the file the entry with the correct keyname is read. By default the keyname is **keyname**. You can override these defaults with a commandline option.
-
-This file should contain the Kintsugi account of the BOT. You should follow the same syntax as the keyfile for vault accounts[^2]. 
-
-### Bitcoin Core RPC information
-When using the issue command, you need to connect via RPC to a Bitcoin Core node. This process is identical to the one used by a Vault. In fact we reused the logic of the bitcoin crate of the interbtc-clients package to manage the BTC transcation of the issue command via rust.
-
-As in the instruction to start a vault[^2] you need to specify the rpc url, user and password to connect to the bitcoin core node.
-
-Example connection parameters
-```
-  --bitcoin-rpc-url http://localhost:18332 \
-  --bitcoin-rpc-user useruseruser \
-  --bitcoin-rpc-pass passpasspass \
-```
-### Interacting with the BTC wallet
-Currently the issue command interacts with a wallet named "InterbtcCLIWallet-master".
-To manually load the wallet, check its balance or get a new btc address to transfer funds use the following commands
-```
-curl --data-binary '{"jsonrpc": "1.0", "id":"curltext", "method": "loadwallet", "params": ["PremiumBotWallet-master"]}' -H 'content-type: text/plain;' http://useruseruser:passpasspass@127.0.0.1:18332/
-curl --data-binary '{"jsonrpc": "1.0", "id":"curltest", "method": "getbalance", "params": ["*", 6] }' -H 'content-type: text/plain;' http://useruseruser:passpasspass@127.0.0.1:18332/
-curl --data-binary '{"jsonrpc": "1.0", "id":"curltest", "method": "getnewaddress", "params": [] }' -H 'content-type: text/plain;' http://useruseruser:passpasspass@127.0.0.1:18332/
-```
-
+To interact with the Bitcoin network we used the Bitcoin Dev Kit[^2] libraries that provide tools to generate an in memory BTC wallet and to sent BTC transactions.
  
 ## Issues and possible next steps
-* Resolve "connection closed" issue on Kintsugi **transfer** tests.
-* **Issue** and **redeem** should select a vault automatically if no vault is specified
-* Obfuscate the Bitcoin Core user and password in a file similar to keyfile.json for the Interbtc account details
-* Add options to select the name of the BTC wallet on the RPC node in the **issue** command.  
-* Add to **redeem** Bitcoin Core BTC Wallet info to the redeem command (so as to generate )
-* The **redeem** command does not check if the vault specified in the command options is valid or has aenough redeemable tokens. In case of error the Extrinsic error is reported by the program. Add some error management.
+Due to lack of time, some issues have been identified but not yet resolved. There are also some ideas to improve the Premium BOT.
+- **Create a 'personalized' BTC wallet**
+In the current release the bitcoin walllet created when running the PremiumBOT is always called "PremiumBotWallet-master".
+In a future release, the name of the Bot Walled will be linked to the address of the parachain account stored in the keyfile.json
+
+- **Include an integration test to simulate Premium Vaults.** Without an integration/mockup setup, it is not possible to completely test the Premium BOT as it requires vaults to be in Premium Redeem state. To mitigate this, we added an option to the Redeemer that will consider all vaults, with their redeemable capacity as Premium.
+
+- **Include some external logging / alerting mechanism** This would be useful for the bot operator to be informed of the activty of the bot.
+
+- **Do not display bitcoin core RPC user and password** We initially followed the same approach as with vaults, where the Bitcoin Core RPC user and password are part of the command line options. IN a future version we will configure a json file with the user and password.
+
+- **Define default rpc url in the code** In the current release the **--bitcoin-rpc-url** parameter is mandatory. A future release would define the default url in the code (different values based on the testnet/kintsugi build) and make **--bitcoin-rpc-url** optional. 
+
+
 ## How to build
 Please read the prerequisites provided in the README_interlay.md file about how to build the interbtc-clients repository. Building the Premium BOT repository uses exactly the same process. You only need to select the correct branch.
 
-At the time of release of this update (27/6/2022) the main branch on Testnet and Kintsugi is 1.14.0 
-The corresponding Premium BOT branch is cli-1.14.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/cli-1.14.0).
+At the time of release of the project (20/6/2022) the main branch on Testnet and Kintsugi is 1.14.0 
+The corresponding Premium BOT branch is premium-bot-1.14.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/premium-bot-1.14.0).
 
 In the root of the repository you will find 3 build scripts. They call cargo build --release with the appropriate feature (testnet/kintsugi or interlay) + specify a distinct target directory. For instance the build_kintsugi script is
 ```
 cargo build --release  --features parachain-metadata-kintsugi --target-dir ./target/kintsugi
 ```
 
-## Example executions:
-
-### Explore command
-
-Running "explore vaults" on Testnet and Kintsugi
-
+## Running the Issuer:
+The examples here are for testnet. Adapt the path to the binary for the kintsugi network
 ```
-> ./target/testnet/release/explore vaults
-Connected to Interlay Testnet parachain
--------------------------------
-Found 21 vaults. Current block 179173
-
--------------------------------
-5H3ZbAmcyWfw45SKaHMiRFQ5fcXjBqstbHLs1a7eFtLH8vN5
-   Active
-   Collateral                 16.998000000000 KINT
-   Tokens - Current           0.00010000 KBTC
-   Tokens - Pending           0.00102050 KBTC
-   Tokens - To be issued      0.00102000 KBTC
-   Tokens - To be redeemed    0.00009950 KBTC
-   Tokens - To be replaced    0.00000000 KBTC
-   Collateralization - issued 3258.3400000000000000
-   Collateralization - all    290.9232142857142857
-   Issuable tokens:           0.00000000 KBTC
-
--------------------------------
-5GBfrVtunvfHNo2R35UwSpUciBApSkFCvwpZ6gPznQeDKFC9
-Liquidated
-
--------------------------------
-5H6MkGXDz3f1BYQx3DcfjBs3i4cHixAKzh221aXd7V45ojeN
-   Active
-   Collateral                 334.331333333332 KINT
-   Tokens - Current           0.00100000 KBTC
-   Tokens - Pending           0.00000045 KBTC
-   Tokens - To be issued      0.00000000 KBTC
-   Tokens - To be redeemed    0.00099955 KBTC
-   Tokens - To be replaced    0.00000000 KBTC
-   Collateralization - issued 6408.7970000000000000
-   Collateralization - all    6408.7970000000000000
-   Issuable tokens:           0.01502199 KBTC
-
--------------------------------
-...output interrupted...
+./target/testnet/release/issuer
 ```
 
+Command options and flags:
+
+**-v, --verbose**
+
+Returns a verbose log
+
+**--vault-account-id <VAULT_ACCOUNT_ID>**
+
+By default the Issuer will select a vault with sufficient capacity. For testing purposes, or in case the Bot is linked to a vault account that is set to accept only its own accounts requests (set to inactive), the user might prefer to explicitely specify the target vault with this option.
+
+**--sleeptime-main-loop <SLEEPTIME_MAIN_LOOP>**
+
+**--sleeptime-no-issuable-vault <SLEEPTIME_NO_ISSUABLE_VAULT>**
+
+**--sleeptime-not-enough-btc <SLEEPTIME_NOT_ENOUGH_BTC>**
+
+**--sleeptime-wait-for-btc-transfer <SLEEPTIME_WAIT_FOR_BTC_TRANSFER>**
+
+By default the Issuer will pause 15 seconds after every loop and after determining that its BTC balance is insufficient or that no eligible vault is available.
+The issuer will aslo check for BTC confirmations and wait 120 seconds between succesive checks.
+The above options allow the user to fine tune these idle times
+
+**--min-btc-balance <MIN_BTC_BALANCE>**
+The minimum amount in satoshis allowed for the Issuer to generate an issue request, must be greater than Bridge Fee + BTC Network Fee + BTC Dust Limit [default: 5000]
+
+**--max-issue-amount <MAX_ISSUE_AMOUNT>**
+The maximum amount in satoshis allowed for an individual issue request generated by the Issuer. The actual issue request will be max between this value and the greater available vault issuable capacity [default: 3000]
+
+**--min-issue-amount <MIN_ISSUE_AMOUNT>**
+
+
+**--wait-for-issued-kbtc**
+Issuer will pause after executing the BTC payment to wait for the KBTC to be minted by the vault. A check is done every <SLEEPTIME_MAIN_LOOP> seconds on the balance of the bot account on the parachain
+
+**--btc-network-confirmations**
+issuer will pause after sending the BTC transacton until **btc_network_confirmations** confirmations have been reached. If set to 0 no checks are done after the transfer of BTC. But balances on the account are still evaulated with at least 1 confirmation. 
+
+**-- keyfile <KEYFILE>**
+
+**-- keyname**
+
+The Redeemer and Issuer will read the Kintsugi account information from a json file.
+Unless specified in a commandline option, the issuer and redeemer binaries look for a file named **keyfile.json** in the current directory. 
+In the file the entry with the correct keyname is read. By default the keyname is **keyname**. You can override these defaults with a commandline option.
+
+
+
+This file should contain the Kintsugi account of the BOT. You should follow the same syntax as the keyfile for vault accounts[^3]. 
+### Example execution of the Issuer
+The below output is run with the default settings so no command option needed to be entered. It is a Interlay Testnet execution as mentionned in the log. The bitcoin core is accessed via localhost:18332. For the demo and the documentation we used user **premium** and password **botbotbot** as an example. You should define you own user/password.
+
+Command to run the Issuer:
 ```
-> ./target/kintsugi/release/explore vaults
-Connected to Kintsugi parachain
--------------------------------
-Found 60 vaults. Current block 438045
-
--------------------------------
-a3fudELrRCjuSyYEPkRAKFQyjzo5YyU228LdqinGsnjBUNB8P
-   Inactive
-   Collateral                 188.046805932678 KSM
-   Tokens - Current           0.16203635 KBTC
-   Tokens - Pending           0.16203635 KBTC
-   Tokens - To be issued      0.00000000 KBTC
-   Tokens - To be redeemed    0.00000000 KBTC
-   Tokens - To be replaced    0.00000000 KBTC
-   Collateralization - issued 289.6269201324270757
-   Collateralization - all    289.6269201324270757
-   Issuable tokens:           0.00000000 KBTC
-   -------------------------------
-a3bAsW2TQb1c7HrcZd2y81SdCVSGEA5pRkfg576G2EyxQupbw
-   Inactive
-   Collateral                 69.000000000000 KINT
-   Tokens - Current           0.00130088 KBTC
-   Tokens - Pending           0.00130088 KBTC
-   Tokens - To be issued      0.00000000 KBTC
-   Tokens - To be redeemed    0.00000000 KBTC
-   Tokens - To be replaced    0.00000000 KBTC
-   Collateralization - issued 1024.9115983026874115
-   Collateralization - all    1024.9115983026874115
-   Issuable tokens:           0.00000000 KBTC
-```
-
-Running "explore liquidation-vault" on Testnet and Kintsugi. For Kintsugi there are no burnable tokens.
-
-```
-> ./target/testnet/release/explore liquidation-vault
-Connected to Interlay Testnet parachain
--------------------------------
-Liquidation Vault [KSM/KBTC]
---------------------------------
-   Collateral                     333.585543933016  KSM  
-   Burnable                             0.07508604  KBTC - (burnable = issued - to_be_redeemed)
-   Reward per burnt token                1752.4844  KSM  - (collateral / (issued_tokens + to_be_issued_tokens))
---------------------------------
-   to_be_issued_tokens                  0.11506010  KBTC 
-   issued_tokens                        0.07528999  KBTC 
-   to_be_redeemed_tokens                0.00020395  KBTC 
-```
-
-```
-> ./target/kintsugi/release/explore liquidation-vault
-Connected to Kintsugi parachain
--------------------------------
-Liquidation Vault [KSM/KBTC]
---------------------------------
-   Collateral                     0.000000000000  KSM  
-   Burnable                           0.00000000  KBTC - (burnable = issued - to_be_redeemed)
-   Reward per burnt token                    NaN  KSM  - (collateral / (issued_tokens + to_be_issued_tokens))
---------------------------------
-   to_be_issued_tokens                0.00000000  KBTC 
-   issued_tokens                      0.00000000  KBTC 
-   to_be_redeemed_tokens              0.00000000  KBTC 
-```
-
-### Burn command
-
-We will burn 2500 KBTC sat on Testnet
-
-```
-> ./target/testnet/release/burn
-error: The following required arguments were not provided:
-    --amount <AMOUNT>
-
-USAGE:
-    burn [OPTIONS] --amount <AMOUNT>
-
-For more information try --help
-> ./target/testnet/release/burn --amount 2500
-[2022-06-18T12:58:42Z INFO  burn] Connected to Interlay Testnet parachain
-[2022-06-18T12:58:42Z INFO  burn] -------------------------------
-[2022-06-18T12:58:42Z INFO  burn] Signer:             5GTH76cE3vQyehe5w2Q9si4nxZ1izyvQzB6WezCSJGTKxwCU
-[2022-06-18T12:58:42Z INFO  burn] Burn amount:        2500 KBTC sat
-[2022-06-18T12:58:42Z INFO  burn] Wrapped balance:    7145368 KBTC sat
-[2022-06-18T12:58:42Z INFO  burn] Collateral balance: 43095926098 KSM planck
-[2022-06-18T12:58:42Z INFO  burn] Sending burn request to parachain
-[2022-06-18T12:59:24Z INFO  burn] Burn of 2500 KBTC sat into KSM successful
-[2022-06-18T12:59:24Z INFO  burn] Balance:            7142868 KBTC sat
-[2022-06-18T12:59:24Z INFO  burn] Balance:            86955026252 KSM planck
-```
-
-Trying to burn 2500 KBTC sat on Kintsugi where burnable amount is 0 (see explore output above)
-```
- ./target/kintsugi/release/burn \
---amount 2500 \
---keyfile ../kintsugi_test_keyfile/keyfile.json
-[2022-06-18T13:05:29Z INFO  burn] Connected to Kintsugi parachain
-[2022-06-18T13:05:29Z INFO  burn] -------------------------------
-[2022-06-18T13:05:29Z INFO  burn] Signer:             5DkmTr3NeLPkQqefuU7QMJHJsjoso8vbDQbiTEFjCae2ecpK
-[2022-06-18T13:05:29Z INFO  burn] Burn amount:        2500 KBTC sat
-[2022-06-18T13:05:29Z INFO  burn] Wrapped balance:    21971 KBTC sat
-[2022-06-18T13:05:29Z INFO  burn] Collateral balance: 0 KSM planck
-[2022-06-18T13:05:29Z INFO  burn] Sending burn request to parachain
-Error: RuntimeError(SubxtRuntimeError(Module(ModuleError { pallet: "VaultRegistry", error: "InsufficientTokensCommitted", description: ["The requested amount of tokens exceeds the amount available to this vault."], error_data: ModuleErrorData { pallet_index: 20, error: [2, 0, 0, 0] } })))
-```
-### Transfer command
-
-Testnet transfer 
-
-```
-> ./target/testnet/release/transfer --amount 2500
-[2022-06-18T13:25:47Z INFO  transfer] Connected to Interlay Testnet parachain
-[2022-06-18T13:25:47Z INFO  transfer] -------------------------------
-[2022-06-18T13:25:47Z INFO  transfer] Signer:           5GTH76cE3vQyehe5w2Q9si4nxZ1izyvQzB6WezCSJGTKxwCU
-[2022-06-18T13:25:47Z INFO  transfer] Transfer amount:  2500 KSM planck
-[2022-06-18T13:25:47Z INFO  transfer] Balance:          86955026252 KSM planck
-[2022-06-18T13:26:23Z INFO  transfer] Transfer of 2500 KSM sat to account  on Relay Chain successful
-[2022-06-18T13:26:23Z INFO  transfer] Balance:        86955023752 KSM planck
-```
-Kintsugi transfer
-
-```
- ./target/kintsugi/release/transfer \
---amount 2500 \
---keyfile ../kintsugi_test_keyfile/keyfile.json \
---keyname keyname2
-[2022-06-18T13:42:06Z INFO  transfer] Connected to Kintsugi parachain
-[2022-06-18T13:42:06Z INFO  transfer] -------------------------------
-[2022-06-18T13:42:06Z INFO  transfer] Signer:           5EKr3rfb2Pz2tZm4GtaYqguGK2mHkGBm5Eb3gshWsfvigp4u
-[2022-06-18T13:42:06Z INFO  transfer] Transfer amount:  2500 KSM planck
-[2022-06-18T13:42:06Z INFO  transfer] Balance:          449872000000 KSM planck
-Error: RuntimeError(SubxtRuntimeError(Rpc(RestartNeeded("Networking or low-level protocol error: WebSocket connection error: connection closed"))))
-```
-
-### Issue command
-
-
-```
-> ./target/testnet/release/issue \
+ ~/int/my-interbtc-clients-cli$ ./target/testnet/release/issuer \                            
   --bitcoin-rpc-url http://localhost:18332 \
-  --bitcoin-rpc-user useruseruser \
-  --bitcoin-rpc-pass passpasspass \
-  --amount 2500 \
-  --vault 5H6MkGXDz3f1BYQx3DcfjBs3i4cHixAKzh221aXd7V45ojeN
-[2022-06-18T14:56:54Z INFO  issue] Connected to Interlay Testnet parachain
-[2022-06-18T14:56:54Z INFO  issue] -------------------------------
-[2022-06-18T14:56:54Z INFO  issue] Connected to bitcoin Testnet network
-[2022-06-18T14:56:54Z INFO  issue] -------------------------------
-[2022-06-18T14:56:54Z INFO  issue] Signer:           5GTH76cE3vQyehe5w2Q9si4nxZ1izyvQzB6WezCSJGTKxwCU
-[2022-06-18T14:56:54Z INFO  issue] Vault:            5H6MkGXDz3f1BYQx3DcfjBs3i4cHixAKzh221aXd7V45ojeN
-[2022-06-18T14:56:54Z INFO  issue] Issue amount:     2500 KBTC sat
-[2022-06-18T14:56:54Z INFO  issue] Issuable amount:  49651293 KBTC sat
-[2022-06-18T14:56:54Z INFO  issue] BTC balance:      10000 BTC sat
-[2022-06-18T14:56:54Z INFO  issue] Sending issue request to parachain
-[2022-06-18T14:57:30Z INFO  issue] Issue request accepted
-[2022-06-18T14:57:30Z INFO  issue] Issue BTC address: tb1q4watk73an3kn5glgy7088nrrdy3lx2weda7ugm
-[2022-06-18T14:57:30Z INFO  issue] Issue amount:     2496 KBTC sat
-[2022-06-18T14:57:30Z INFO  issue] Issue fee:        4 KBTC sat
-[2022-06-18T14:57:30Z INFO  issue] Building BTC transaction
-[2022-06-18T14:57:30Z INFO  issue] Transaction sent. TxID: 41668bc0ec941a4dd5d28110627306e2218c4989759c3e9a29da9584bcee5b46
+  --bitcoin-rpc-user premium \
+  --bitcoin-rpc-pass botbotbot
 ```
 
-### Redeem command
+Output
+```
+[2022-06-11T15:55:07Z INFO  issuer] Connected to Interlay Testnet parachain
+[2022-06-11T15:55:07Z INFO  issuer] -------------------------------
+[2022-06-11T15:55:07Z INFO  issuer] Connected to bitcoin Testnet network
+[2022-06-11T15:55:07Z INFO  issuer] -------------------------------
+[2022-06-11T15:55:07Z INFO  issuer] Automatic selection of vault
+[2022-06-11T15:55:07Z INFO  issuer] Signer:                  5GTH76cE3vQyehe5w2Q9si4nxZ1izyvQzB6WezCSJGTKxwCU
+[2022-06-11T15:55:07Z INFO  issuer] Max issue amount:        15000 KBTC sat
+[2022-06-11T15:55:07Z INFO  issuer] Min BTC balance:         5000 KBTC sat
+[2022-06-11T15:55:07Z INFO  issuer] 1 BTC confirmations required
+[2022-06-11T15:55:08Z INFO  issuer] Initial wrapped balance: 7166548 KBTC sat
+[2022-06-11T15:55:08Z INFO  issuer] Initial native balance:  340767149729 KINT planck
+[2022-06-11T15:55:08Z INFO  issuer] Initial BTC balance:     87549 BTC sat
+[2022-06-11T15:55:08Z INFO  issuer] [1]-------------------------------
+[2022-06-11T15:55:08Z INFO  issuer] Sufficient BTC balance to attempt issues
+[2022-06-11T15:55:08Z INFO  issuer] Max BTC issue amount for this iteration: 10000 
+[2022-06-11T15:55:10Z INFO  issuer] Selected vault 5F7Q9FqnGwJmjLtsFGymHZXPEx2dWRVE7NW4Sw2jzEhUB5WQ with issuable amount of 43890516 KBTC
+[2022-06-11T15:55:43Z INFO  issuer] Sending issue request for 10000 BTC sat to parachain
+[2022-06-11T15:55:43Z INFO  issuer] Issue request accepted
+[2022-06-11T15:55:43Z INFO  issuer] Issue BTC address: tb1qjtjxea3yhfpvzzgfp0zjxfltr3swqpz0qqpauj
+[2022-06-11T15:55:43Z INFO  issuer] Issue amount:     9985 KBTC sat
+[2022-06-11T15:55:43Z INFO  issuer] Issue fee:        15 KBTC sat
+[2022-06-11T15:55:43Z INFO  issuer] Building BTC transaction
+[2022-06-11T15:55:43Z INFO  issuer] Transaction sent. TxID: 25b55cc1a1a86d85f0e26fb248b976d336ee0cf4683dfc8db6a52b86e016f9da
+[2022-06-11T15:55:43Z INFO  issuer] Not waiting for parachain KBTC issue confirmation. KBTC balance and delta migth be incorrect
+[2022-06-11T15:55:43Z INFO  issuer] Waiting for 1 confirmations on bitcoin testnet network
+[2022-06-11T16:11:44Z INFO  issuer] Received 1/1 confirmations
+[2022-06-11T16:11:44Z INFO  issuer] Wrapped balance:       7166548 KBTC sat
+[2022-06-11T16:11:44Z INFO  issuer] Native balance:        337685378527 KINT planck
+[2022-06-11T16:11:44Z INFO  issuer] BTC balance:           104969 BTC sat
+[2022-06-11T16:11:44Z INFO  issuer] Delta wrapped balance: 0 KBTC sat
+[2022-06-11T16:11:44Z INFO  issuer] Delta native balance:  -3081771202 KINT planck
+[2022-06-11T16:11:44Z INFO  issuer] Delta BTC balance:     17420 BTC sat
+[2022-06-11T16:11:44Z INFO  issuer] Waiting 15 seconds before next loop iteration
+[2022-06-11T16:11:59Z INFO  issuer] [2]-------------------------------
+[2022-06-11T16:11:59Z INFO  issuer] Sufficient BTC balance to attempt issues
+[2022-06-11T16:11:59Z INFO  issuer] Max BTC issue amount for this iteration: 10000 
+[2022-06-11T16:12:02Z INFO  issuer] Selected vault 5F7Q9FqnGwJmjLtsFGymHZXPEx2dWRVE7NW4Sw2jzEhUB5WQ with issuable amount of 44022496 KBTC
+[2022-06-11T16:12:41Z INFO  issuer] Sending issue request for 10000 BTC sat to parachain
+[2022-06-11T16:12:41Z INFO  issuer] Issue request accepted
+[2022-06-11T16:12:41Z INFO  issuer] Issue BTC address: tb1q7ylq53gvkxfhm3pkjyjav0hhqjctwrpc9fgmpc
+[2022-06-11T16:12:41Z INFO  issuer] Issue amount:     9985 KBTC sat
+[2022-06-11T16:12:41Z INFO  issuer] Issue fee:        15 KBTC sat
+[2022-06-11T16:12:41Z INFO  issuer] Building BTC transaction
+[2022-06-11T16:12:42Z INFO  issuer] Transaction sent. TxID: 0b71ba851876de27138e65b657560526bf6f138af0b67f389b0b4bd16893934c
+[2022-06-11T16:12:42Z INFO  issuer] Not waiting for parachain KBTC issue confirmation. KBTC balance and delta migth be incorrect
+[2022-06-11T16:12:42Z INFO  issuer] Waiting for 1 confirmations on bitcoin testnet network
+[2022-06-11T16:16:54Z INFO  issuer] Received 1/1 confirmations
+[2022-06-11T16:16:54Z INFO  issuer] Wrapped balance:       7130503 KBTC sat
+[2022-06-11T16:16:54Z INFO  issuer] Native balance:        337033931527 KINT planck
+[2022-06-11T16:16:54Z INFO  issuer] BTC balance:           92149 BTC sat
+[2022-06-11T16:16:54Z INFO  issuer] Delta wrapped balance: -36045 KBTC sat
+[2022-06-11T16:16:54Z INFO  issuer] Delta native balance:  -651447000 KINT planck
+[2022-06-11T16:16:54Z INFO  issuer] Delta BTC balance:     -12820 BTC sat
+[2022-06-11T16:16:54Z INFO  issuer] Waiting 15 seconds before next loop iteration
+[2022-06-11T16:17:09Z INFO  issuer] [3]-------------------------------
+[2022-06-11T16:17:09Z INFO  issuer] Sufficient BTC balance to attempt issues
+[2022-06-11T16:17:09Z INFO  issuer] Max BTC issue amount for this iteration: 10000 
+[2022-06-11T16:17:12Z INFO  issuer] Selected vault 5F7Q9FqnGwJmjLtsFGymHZXPEx2dWRVE7NW4Sw2jzEhUB5WQ with issuable amount of 44012496 KBTC
+[2022-06-11T16:17:54Z INFO  issuer] Sending issue request for 10000 BTC sat to parachain
+[2022-06-11T16:17:54Z INFO  issuer] Issue request accepted
+[2022-06-11T16:17:54Z INFO  issuer] Issue BTC address: tb1qmuycxjjnnpjg86yx4qtym7m82x5g2fjuf4dcsa
+[2022-06-11T16:17:54Z INFO  issuer] Issue amount:     9985 KBTC sat
+[2022-06-11T16:17:54Z INFO  issuer] Issue fee:        15 KBTC sat
+[2022-06-11T16:17:54Z INFO  issuer] Building BTC transaction
+[2022-06-11T16:17:55Z INFO  issuer] Transaction sent. TxID: b6a5e01fa6dcbac4b08f972e308035b4f342c5c845fdbaf4e12c4170814690a9
+[2022-06-11T16:17:55Z INFO  issuer] Not waiting for parachain KBTC issue confirmation. KBTC balance and delta migth be incorrect
+[2022-06-11T16:17:55Z INFO  issuer] Waiting for 1 confirmations on bitcoin testnet network
+``` 
 
-I ran the **redeem** command on the Kintsugi network. Testnet vaults were how of capacity at the time of writing. 
+### Example execution of the Issuer on Kintsugi chain
+> ./target/kintsugi/release/issuer \
+  --bitcoin-rpc-url http://localhost:8332 \
+  --bitcoin-rpc-user premium \
+  --bitcoin-rpc-pass botbotbot  \
+  --keyfile ../kintsugi_bot_test/keyfile.json \
+  --max-issue-amount 100000 \
+  --sleeptime-not-enough-btc 200
+[2022-06-16T04:55:00Z INFO  issuer] Connected to Kintsugi parachain
+[2022-06-16T04:55:00Z INFO  issuer] -------------------------------
+[2022-06-16T04:55:00Z INFO  issuer] Connected to bitcoin Bitcoin network
+[2022-06-16T04:55:00Z INFO  issuer] -------------------------------
+[2022-06-16T04:55:00Z INFO  issuer] Automatic selection of vault
+[2022-06-16T04:55:00Z INFO  issuer] Signer:                  5DkmTr3NeLPkQqefuU7QMJHJsjoso8vbDQbiTEFjCae2ecpK
+[2022-06-16T04:55:00Z INFO  issuer] Max issue amount:        100000 KBTC sat
+[2022-06-16T04:55:00Z INFO  issuer] Min BTC balance:         5000 KBTC sat
+[2022-06-16T04:55:00Z INFO  issuer] 1 BTC confirmations required
+[2022-06-16T04:55:01Z INFO  issuer] Initial wrapped balance: 0 KBTC sat
+[2022-06-16T04:55:01Z INFO  issuer] Initial native balance:  135228667210 KINT planck
+[2022-06-16T04:55:01Z INFO  issuer] Initial BTC balance:     0 BTC sat
+[2022-06-16T04:55:01Z INFO  issuer] [1]-------------------------------
+[2022-06-16T04:55:01Z WARN  issuer] Insufficient BTC balance:   0 BTC sat
+[2022-06-16T04:55:01Z INFO  issuer] Waiting 200 seconds before checking again
+[2022-06-16T04:58:35Z INFO  issuer] [2]-------------------------------
+[2022-06-16T04:58:35Z WARN  issuer] Insufficient BTC balance:   0 BTC sat
+[2022-06-16T04:58:35Z INFO  issuer] Waiting 200 seconds before checking again
+[2022-06-16T05:02:09Z INFO  issuer] [3]-------------------------------
+[2022-06-16T05:02:09Z WARN  issuer] Insufficient BTC balance:   0 BTC sat
+[2022-06-16T05:02:09Z INFO  issuer] Waiting 200 seconds before checking again
+[2022-06-16T05:05:44Z INFO  issuer] [4]-------------------------------
+[2022-06-16T05:05:44Z WARN  issuer] Insufficient BTC balance:   0 BTC sat
+[2022-06-16T05:05:44Z INFO  issuer] Waiting 200 seconds before checking again
+[2022-06-16T05:09:18Z INFO  issuer] [5]-------------------------------
+[2022-06-16T05:09:18Z WARN  issuer] Insufficient BTC balance:   0 BTC sat
+[2022-06-16T05:09:18Z INFO  issuer] Waiting 200 seconds before checking again
+[2022-06-16T05:12:52Z INFO  issuer] [6]-------------------------------
+[2022-06-16T05:12:52Z INFO  issuer] Sufficient BTC balance to attempt issues
+[2022-06-16T05:12:52Z INFO  issuer] Max BTC issue amount for this iteration: 27255
+[2022-06-16T05:12:56Z INFO  issuer] Selected vault a3e2AF9D4WUhuZPZvNiAkW2eWGLfMWQfBYWzwgk8bhmHF3LDc with issuable amount of 12342 KBTC
+[2022-06-16T05:13:45Z INFO  issuer] Sending issue request for 12342 BTC sat to parachain
+[2022-06-16T05:13:45Z INFO  issuer] Issue request accepted
+[2022-06-16T05:13:45Z INFO  issuer] Issue BTC address: bc1qql2gs04spsttwhmq37v2rewxk6vt208eycuf3n
+[2022-06-16T05:13:45Z INFO  issuer] Issue amount:     12323 KBTC sat
+[2022-06-16T05:13:45Z INFO  issuer] Issue fee:        19 KBTC sat
+[2022-06-16T05:13:45Z INFO  issuer] Building BTC transaction
+[2022-06-16T05:13:45Z INFO  issuer] Transaction sent. TxID: 6d5c4c36978c0c88d0475ae0f2202bed999ede04d0b7a446e44c1999f5e55d6d
+[2022-06-16T05:13:45Z INFO  issuer] Not waiting for parachain KBTC issue confirmation. KBTC balance and delta migth be incorrect
+[2022-06-16T05:13:45Z INFO  issuer] Waiting for 1 confirmations on bitcoin bitcoin network
+[2022-06-16T05:19:05Z INFO  issuer] Received 1/1 confirmations
+[2022-06-16T05:19:05Z INFO  issuer] Wrapped balance:       0 KBTC sat
+[2022-06-16T05:19:05Z INFO  issuer] Native balance:        135061149220 KINT planck
+[2022-06-16T05:19:05Z INFO  issuer] BTC balance:           17673 BTC sat
+[2022-06-16T05:19:05Z INFO  issuer] Delta wrapped balance: 0 KBTC sat
+[2022-06-16T05:19:05Z INFO  issuer] Delta native balance:  -167517990 KINT planck
+[2022-06-16T05:19:05Z INFO  issuer] Delta BTC balance:     -14582 BTC sat
+[2022-06-16T05:19:05Z INFO  issuer] Waiting 15 seconds before next loop iteration
+[2022-06-16T05:19:20Z INFO  issuer] [7]-------------------------------
+[2022-06-16T05:19:20Z INFO  issuer] Sufficient BTC balance to attempt issues
+[2022-06-16T05:19:20Z INFO  issuer] Max BTC issue amount for this iteration: 12673
+[2022-06-16T05:19:24Z INFO  issuer] Selected vault a3dJfVzssBJgBmRuMZBre5H71rvawHJoFvFHGz2Aq7Hdt492w with issuable amount of 9662 KBTC
+[2022-06-16T05:20:18Z INFO  issuer] Sending issue request for 9662 BTC sat to parachain
+[2022-06-16T05:20:18Z INFO  issuer] Issue request accepted
+[2022-06-16T05:20:18Z INFO  issuer] Issue BTC address: bc1qdxtc8gd976jmyp7qu2d5ng4klyu8rdn38fgms8
+[2022-06-16T05:20:18Z INFO  issuer] Issue amount:     9648 KBTC sat
+[2022-06-16T05:20:18Z INFO  issuer] Issue fee:        14 KBTC sat
+[2022-06-16T05:20:18Z INFO  issuer] Building BTC transaction
+[2022-06-16T05:20:18Z INFO  issuer] Transaction sent. TxID: afdd16253dde00883ae4132912fd1822017aab1a1c83da026444bee31699ec70
+[2022-06-16T05:20:18Z INFO  issuer] Not waiting for parachain KBTC issue confirmation. KBTC balance and delta migth be incorrect
+[2022-06-16T05:20:18Z INFO  issuer] Waiting for 1 confirmations on bitcoin bitcoin network
+[2022-06-16T05:25:17Z INFO  issuer] Received 1/1 confirmations
+[2022-06-16T05:25:17Z INFO  issuer] Wrapped balance:       0 KBTC sat
+[2022-06-16T05:25:17Z INFO  issuer] Native balance:        134901828453 KINT planck
+[2022-06-16T05:25:17Z INFO  issuer] BTC balance:           5771 BTC sat
+[2022-06-16T05:25:17Z INFO  issuer] Delta wrapped balance: 0 KBTC sat
+[2022-06-16T05:25:17Z INFO  issuer] Delta native balance:  -159320767 KINT planck
+[2022-06-16T05:25:17Z INFO  issuer] Delta BTC balance:     -11902 BTC sat
+[2022-06-16T05:25:17Z INFO  issuer] Waiting 15 seconds before next loop iteration
+[2022-06-16T05:25:33Z INFO  issuer] [8]-------------------------------
+[2022-06-16T05:25:33Z WARN  issuer] Insufficient BTC balance:   5771 BTC sat
+[2022-06-16T05:25:33Z INFO  issuer] Waiting 200 seconds before checking again
+[2022-06-16T05:29:07Z INFO  issuer] [9]-------------------------------
+[2022-06-16T05:29:07Z WARN  issuer] Insufficient BTC balance:   5771 BTC sat
+[2022-06-16T05:29:07Z INFO  issuer] Waiting 200 seconds before checking again
+[2022-06-16T05:32:40Z INFO  issuer] [10]-------------------------------
+
+
+## Running the Redeemer:
+```
+./target/release/redeemer --btc-address <BTC_ADDRESS>
+```
+
+Command options and flags:
+
+**-v, --verbose**
+
+Returns a verbose log
+
+**--treat-all-vaults-as-premium**
+
+This option is provided in order to test the Redeemer in a situation where no Premium Redeem vault exists. It will consider each vault as Premium Redeem.
+
+**--sleeptime-main-loop <SLEEPTIME_MAIN_LOOP>**
+
+**--sleeptime-no-premium-vault <SLEEPTIME_NO_PREMIUM_VAULT>>**
+
+**--sleeptime-not-enough-balance <SLEEPTIME_NOT_ENOUGH_BALANCE>**
+
+By default the Issuer will pause 15 seconds after every loop and after determining that its KBTC balance is insufficient or that no eligible vault is available.
+The above options allow the user to fine tune these idle times
+
+**--min-wrapped-balance <MIN_WRAPPED_BALANCE>**
+
+The minimum required KBTC wallet balance in sat for the Redeemer to request a redeem [default: 2000]
+
+**--max-redeem-amount <MAX_REDEEM_AMOUNT>**
+The maximum amount in satoshis allowed for an individual redeem request generated by the Redeemer. The issue request will be max between this value and the greater available vault issuable capacity [default: 3000]
+
+**--min-issue-amount <MIN_ISSUE_AMOUNT>**
+The minimum amount in satoshis allowed for the Issuer to generate an issue request, must be greater than Bridge Fee + BTC Network Fee + BTC Dust Limit [default: 2000]
+
+**-- keyfile <KEYFILE>**
+
+**-- keyname**
+
+The Redeemer and Issuer will read the Kintsugi account information from a json file.
+Unless specified in a commandline option, the Redeemer looks for this a file named keyfile.json in the current durectory. 
+In each file the entry with the correct keyname is read. By default the keyname is "keyname". You can override these defaults with a commandline option.
+
+*keyfile.json*
+
+This file should contain the Kintsugi account of the BOT. You should follow the same syntax as the keyfile for vault accounts[^3]. 
+
+
+### Example executions of the Redeemer
+The below output is run with the default settings, with the bitcoin RPC url, user and password specified. 
+As there are no Premium Redeem vaults available in the Testnet at the moment of the example, it will loop without redeeming.
+The example is run on the Interlay Testnet as mentionned in the log.
 
 ```
-> ./target/kintsugi/release/redeem \
-  --btc-address bc1qstz4znvydj5mypqnu34je6x0umfugen039849s \
-  --amount 12500 \
-  --vault a3b5jAhU7CKnBKA3y92HkiCqRTbSKRMK5kN3RVPXcKoH4SDaC \
-  --keyfile ../kintsugi_test_keyfile/keyfile.json
-[2022-06-18T15:26:21Z INFO  redeem] Connected to Kintsugi parachain
-[2022-06-18T15:26:21Z INFO  redeem] -------------------------------
-[2022-06-18T15:26:21Z INFO  redeem] Signer:         5DkmTr3NeLPkQqefuU7QMJHJsjoso8vbDQbiTEFjCae2ecpK
-[2022-06-18T15:26:21Z INFO  redeem] Vault:          5CwH4ELoC9Bjt8T1tsaXX1h6XngZWoBJT6JywPSz7LuWVq7J
-[2022-06-18T15:26:21Z INFO  redeem] BTC Address     bc1qstz4znvydj5mypqnu34je6x0umfugen039849s
-[2022-06-18T15:26:21Z INFO  redeem] Redeem amount:  12500 KBTC sat
-[2022-06-18T15:26:21Z INFO  redeem] Balance:        21971 KBTC sat
-[2022-06-18T15:27:08Z INFO  redeem] Vault 5CwH4ELoC9Bjt8T1tsaXX1h6XngZWoBJT6JywPSz7LuWVq7J confirmed redeem request of 12500 KBTC sat to BTC address bc1qstz4znvydj5mypqnu34je6x0umfugen039849s
+ ~/int/my-interbtc-clients-cli │ premium-bot-1.14.0 !6  ./target/testnet/release/redeemer \                                            
+  --bitcoin-rpc-url http://localhost:18332 \
+  --bitcoin-rpc-user premium \
+  --bitcoin-rpc-pass botbotbot          
+[2022-06-11T16:12:15Z INFO  redeemer] Connected to Interlay Testnet parachain
+[2022-06-11T16:12:15Z INFO  redeemer] -------------------------------
+[2022-06-11T16:12:16Z INFO  redeemer] Connected to bitcoin Testnet network
+[2022-06-11T16:12:16Z INFO  redeemer] -------------------------------
+[2022-06-11T16:12:16Z INFO  redeemer] Parachain signer:           5GTH76cE3vQyehe5w2Q9si4nxZ1izyvQzB6WezCSJGTKxwCU
+[2022-06-11T16:12:16Z INFO  redeemer] 1 BTC confirmations required
+[2022-06-11T16:12:16Z INFO  redeemer] Max redeem amount:          15000 KBTC sat
+[2022-06-11T16:12:16Z INFO  redeemer] Min wrapped balance:        5000 KBTC sat
+[2022-06-11T16:12:16Z INFO  redeemer] Initial wrapped balance:    7130503 KBTC sat
+[2022-06-11T16:12:16Z INFO  redeemer] Initial collateral balance: 43095926098 KSM planck
+[2022-06-11T16:12:16Z INFO  redeemer] Initial native balance:     337685378527 KINT planck
+[2022-06-11T16:12:16Z INFO  redeemer] Initial BTC balance:        104969 BTC sat
+[2022-06-11T16:12:16Z INFO  redeemer] [1]-------------------------------
+[2022-06-11T16:12:16Z INFO  redeemer] Max KBTC redeem amount for this iteration: 15000 
+[2022-06-11T16:12:16Z INFO  redeemer] Sufficient KBTC balance to attempt premium redeems
+[2022-06-11T16:12:16Z WARN  redeemer] No premium redeem vault found
+[2022-06-11T16:12:16Z INFO  redeemer] Waiting 60 seconds before checking again
+[2022-06-11T16:13:17Z INFO  redeemer] [2]-------------------------------
+[2022-06-11T16:13:17Z INFO  redeemer] Max KBTC redeem amount for this iteration: 15000 
+[2022-06-11T16:13:17Z INFO  redeemer] Sufficient KBTC balance to attempt premium redeems
+[2022-06-11T16:13:17Z WARN  redeemer] No premium redeem vault found
+[2022-06-11T16:13:17Z INFO  redeemer] Waiting 60 seconds before checking again
 ```
 
-[^1]: https://spec.interlay.io/security_performance/liquidations.html?highlight=liquidation#liquidations-safety-failures
-[^2]: See https://docs.interlay.io/#/vault/installation?id=prerequisites 
+To observe the Redeemer actually sending redeem requests, we have added the option "--treat-all-vaults-as-premium".
+Here you can see that 4 redeems are performed on 4 different vaults (as all availabe issuable KBTC are treated as premium for testing purposes).
+After the 4th redeem, the issuable capacity is too low and the Redeemer does idle loops until later on another vault has enough capacity.
+
+```
+ ~/int/my-interbtc-clients-cli │ premium-bot-1.14.0 !6  ./target/testnet/release/redeemer \                                                    --bitcoin-rpc-url http://localhost:18332 \
+  --bitcoin-rpc-user premium \
+  --bitcoin-rpc-pass botbotbot  \
+  --treat-all-vaults-as-premium
+[2022-06-11T15:57:53Z INFO  redeemer] Connected to Interlay Testnet parachain
+[2022-06-11T15:57:53Z INFO  redeemer] -------------------------------
+[2022-06-11T15:57:53Z INFO  redeemer] Connected to bitcoin Testnet network
+[2022-06-11T15:57:53Z INFO  redeemer] -------------------------------
+[2022-06-11T15:57:53Z INFO  redeemer] Parachain signer:           5GTH76cE3vQyehe5w2Q9si4nxZ1izyvQzB6WezCSJGTKxwCU
+[2022-06-11T15:57:53Z INFO  redeemer] 1 BTC confirmations required
+[2022-06-11T15:57:53Z INFO  redeemer] Treat all vaults as premium (for testing)
+[2022-06-11T15:57:53Z INFO  redeemer] Max redeem amount:          15000 KBTC sat
+[2022-06-11T15:57:53Z INFO  redeemer] Min wrapped balance:        5000 KBTC sat
+[2022-06-11T15:57:53Z INFO  redeemer] Initial wrapped balance:    7166548 KBTC sat
+[2022-06-11T15:57:53Z INFO  redeemer] Initial collateral balance: 43095926098 KSM planck
+[2022-06-11T15:57:53Z INFO  redeemer] Initial native balance:     340115536759 KINT planck
+[2022-06-11T15:57:53Z INFO  redeemer] Initial BTC balance:        74636 BTC sat
+[2022-06-11T15:57:53Z INFO  redeemer] [1]-------------------------------
+[2022-06-11T15:57:53Z INFO  redeemer] Max KBTC redeem amount for this iteration: 15000 
+[2022-06-11T15:57:53Z INFO  redeemer] Sufficient KBTC balance to attempt premium redeems
+[2022-06-11T15:57:54Z INFO  redeemer] Found vault 5HfxGxXggqxTa8xpTnrYrwwd7XUVk3RLUZUWNedLfJ8jw2WP with capacity 10028
+[2022-06-11T15:57:54Z INFO  redeemer] Redeem request amount  10028 KBTC Sat
+[2022-06-11T15:57:54Z INFO  redeemer] BTC receive address:        tb1qd6n59ldzjrecdzkyme5e2dda0jpye9kpl57cnu
+[2022-06-11T15:57:54Z INFO  redeemer] Sending redeem request to parachain to vault 5HfxGxXggqxTa8xpTnrYrwwd7XUVk3RLUZUWNedLfJ8jw2WP
+[2022-06-11T15:59:03Z INFO  redeemer] Parachain confirms redeem request of 10028 KBTC sat to BTC address tb1qd6n59ldzjrecdzkyme5e2dda0jpye9kpl57cnu
+[2022-06-11T15:59:04Z INFO  redeemer] Wrapped balance:          7156520 KBTC sat
+[2022-06-11T15:59:04Z INFO  redeemer] Collateral balance:       43095926098 KSM planck
+[2022-06-11T15:59:04Z INFO  redeemer] Native balance:           339625251748 KINT planck
+[2022-06-11T15:59:04Z INFO  redeemer] BTC balance:              74636 BTC sat
+[2022-06-11T15:59:04Z INFO  redeemer] Delta wrapped balance:    -10028 KBTC sat
+[2022-06-11T15:59:04Z INFO  redeemer] Delta collateral balance: 0 KSM planck
+[2022-06-11T15:59:04Z INFO  redeemer] Delta native balance:     -490285011 KINT planck
+[2022-06-11T15:59:04Z INFO  redeemer] Delta BTC balance:        0 BTC sat
+[2022-06-11T15:59:04Z INFO  redeemer] Waiting 10 seconds before next loop iteration
+[2022-06-11T15:59:14Z INFO  redeemer] [2]-------------------------------
+[2022-06-11T15:59:14Z INFO  redeemer] Max KBTC redeem amount for this iteration: 15000 
+[2022-06-11T15:59:14Z INFO  redeemer] Sufficient KBTC balance to attempt premium redeems
+[2022-06-11T15:59:14Z INFO  redeemer] Found vault 5CScYivFvmE8jTD3EfU8Z2zPciar1JXSj6bvE7UmnrS43zyj with capacity 10010
+[2022-06-11T15:59:14Z INFO  redeemer] Redeem request amount  10010 KBTC Sat
+[2022-06-11T15:59:14Z INFO  redeemer] BTC receive address:        tb1qzmhadrfd6gj8nvxvk3xqlq5v6v7qast83rjlwh
+[2022-06-11T15:59:14Z INFO  redeemer] Sending redeem request to parachain to vault 5CScYivFvmE8jTD3EfU8Z2zPciar1JXSj6bvE7UmnrS43zyj
+[2022-06-11T15:59:59Z INFO  redeemer] Parachain confirms redeem request of 10010 KBTC sat to BTC address tb1qzmhadrfd6gj8nvxvk3xqlq5v6v7qast83rjlwh
+[2022-06-11T16:00:00Z INFO  redeemer] Wrapped balance:          7146510 KBTC sat
+[2022-06-11T16:00:00Z INFO  redeemer] Collateral balance:       43095926098 KSM planck
+[2022-06-11T16:00:00Z INFO  redeemer] Native balance:           339134977523 KINT planck
+[2022-06-11T16:00:00Z INFO  redeemer] BTC balance:              74636 BTC sat
+[2022-06-11T16:00:00Z INFO  redeemer] Delta wrapped balance:    -10010 KBTC sat
+[2022-06-11T16:00:00Z INFO  redeemer] Delta collateral balance: 0 KSM planck
+[2022-06-11T16:00:00Z INFO  redeemer] Delta native balance:     -490274225 KINT planck
+[2022-06-11T16:00:00Z INFO  redeemer] Delta BTC balance:        0 BTC sat
+[2022-06-11T16:00:00Z INFO  redeemer] Waiting 10 seconds before next loop iteration
+[2022-06-11T16:00:10Z INFO  redeemer] [3]-------------------------------
+[2022-06-11T16:00:10Z INFO  redeemer] Max KBTC redeem amount for this iteration: 15000 
+[2022-06-11T16:00:10Z INFO  redeemer] Sufficient KBTC balance to attempt premium redeems
+[2022-06-11T16:00:10Z INFO  redeemer] Found vault 5H6MkGXDz3f1BYQx3DcfjBs3i4cHixAKzh221aXd7V45ojeN with capacity 9008
+[2022-06-11T16:00:10Z INFO  redeemer] Redeem request amount  9008 KBTC Sat
+[2022-06-11T16:00:10Z INFO  redeemer] BTC receive address:        tb1q6vnjv9wwgtapgsh3jp2swlr3wa6png7uv4la5v
+[2022-06-11T16:00:10Z INFO  redeemer] Sending redeem request to parachain to vault 5H6MkGXDz3f1BYQx3DcfjBs3i4cHixAKzh221aXd7V45ojeN
+[2022-06-11T16:00:55Z INFO  redeemer] Parachain confirms redeem request of 9008 KBTC sat to BTC address tb1q6vnjv9wwgtapgsh3jp2swlr3wa6png7uv4la5v
+[2022-06-11T16:00:56Z INFO  redeemer] Wrapped balance:          7137502 KBTC sat
+[2022-06-11T16:00:56Z INFO  redeemer] Collateral balance:       43095926098 KSM planck
+[2022-06-11T16:00:56Z INFO  redeemer] Native balance:           338644714083 KINT planck
+[2022-06-11T16:00:56Z INFO  redeemer] BTC balance:              74636 BTC sat
+[2022-06-11T16:00:56Z INFO  redeemer] Delta wrapped balance:    -9008 KBTC sat
+[2022-06-11T16:00:56Z INFO  redeemer] Delta collateral balance: 0 KSM planck
+[2022-06-11T16:00:56Z INFO  redeemer] Delta native balance:     -490263440 KINT planck
+[2022-06-11T16:00:56Z INFO  redeemer] Delta BTC balance:        0 BTC sat
+[2022-06-11T16:00:56Z INFO  redeemer] Waiting 10 seconds before next loop iteration
+[2022-06-11T16:01:06Z INFO  redeemer] [4]-------------------------------
+[2022-06-11T16:01:06Z INFO  redeemer] Max KBTC redeem amount for this iteration: 15000 
+[2022-06-11T16:01:06Z INFO  redeemer] Sufficient KBTC balance to attempt premium redeems
+[2022-06-11T16:01:06Z INFO  redeemer] Found vault 5F7Q9FqnGwJmjLtsFGymHZXPEx2dWRVE7NW4Sw2jzEhUB5WQ with capacity 6956
+[2022-06-11T16:01:06Z INFO  redeemer] Redeem request amount  6956 KBTC Sat
+[2022-06-11T16:01:07Z INFO  redeemer] BTC receive address:        tb1qwnl6e8c9mg7c3kdqgwx5y444s92453gx5cyh6x
+[2022-06-11T16:01:07Z INFO  redeemer] Sending redeem request to parachain to vault 5F7Q9FqnGwJmjLtsFGymHZXPEx2dWRVE7NW4Sw2jzEhUB5WQ
+[2022-06-11T16:01:44Z INFO  redeemer] Parachain confirms redeem request of 6956 KBTC sat to BTC address tb1qwnl6e8c9mg7c3kdqgwx5y444s92453gx5cyh6x
+[2022-06-11T16:01:44Z INFO  redeemer] Wrapped balance:          7130546 KBTC sat
+[2022-06-11T16:01:44Z INFO  redeemer] Collateral balance:       43095926098 KSM planck
+[2022-06-11T16:01:44Z INFO  redeemer] Native balance:           338154461427 KINT planck
+[2022-06-11T16:01:44Z INFO  redeemer] BTC balance:              74636 BTC sat
+[2022-06-11T16:01:44Z INFO  redeemer] Delta wrapped balance:    -6956 KBTC sat
+[2022-06-11T16:01:44Z INFO  redeemer] Delta collateral balance: 0 KSM planck
+[2022-06-11T16:01:44Z INFO  redeemer] Delta native balance:     -490252656 KINT planck
+[2022-06-11T16:01:44Z INFO  redeemer] Delta BTC balance:        0 BTC sat
+[2022-06-11T16:01:44Z INFO  redeemer] Waiting 10 seconds before next loop iteration
+[2022-06-11T16:01:54Z INFO  redeemer] [5]-------------------------------
+[2022-06-11T16:01:54Z INFO  redeemer] Max KBTC redeem amount for this iteration: 15000 
+[2022-06-11T16:01:54Z INFO  redeemer] Sufficient KBTC balance to attempt premium redeems
+[2022-06-11T16:01:55Z INFO  redeemer] Found vault 5H6MkGXDz3f1BYQx3DcfjBs3i4cHixAKzh221aXd7V45ojeN with capacity 125
+[2022-06-11T16:01:55Z INFO  redeemer] Redeem request amount  125 KBTC Sat is below dust level
+[2022-06-11T16:01:55Z INFO  redeemer] Waiting 60 seconds before checking again
+[2022-06-11T16:02:55Z INFO  redeemer] [6]-------------------------------
+...
+[2022-06-11T16:03:56Z INFO  redeemer] [7]-------------------------------
+...
+[2022-06-11T16:04:57Z INFO  redeemer] [8]-------------------------------
+...
+[2022-06-11T16:05:58Z INFO  redeemer] [9]-------------------------------
+[2022-06-11T16:05:58Z INFO  redeemer] Max KBTC redeem amount for this iteration: 15000 
+[2022-06-11T16:05:58Z INFO  redeemer] Sufficient KBTC balance to attempt premium redeems
+[2022-06-11T16:05:59Z INFO  redeemer] Found vault 5F7Q9FqnGwJmjLtsFGymHZXPEx2dWRVE7NW4Sw2jzEhUB5WQ with capacity 5035
+[2022-06-11T16:05:59Z INFO  redeemer] Redeem request amount  5035 KBTC Sat
+[2022-06-11T16:05:59Z INFO  redeemer] BTC receive address:        tb1qapnephwpkrmmcnauy2rqhtx5r96qt7ma3j3k4y
+[2022-06-11T16:05:59Z INFO  redeemer] Sending redeem request to parachain to vault 5F7Q9FqnGwJmjLtsFGymHZXPEx2dWRVE7NW4Sw2jzEhUB5WQ
+[2022-06-11T16:06:33Z INFO  redeemer] Parachain confirms redeem request of 5035 KBTC sat to BTC address tb1qapnephwpkrmmcnauy2rqhtx5r96qt7ma3j3k4y
+[2022-06-11T16:06:33Z INFO  redeemer] Wrapped balance:          7130503 KBTC sat
+[2022-06-11T16:06:33Z INFO  redeemer] Collateral balance:       43095926098 KSM planck
+[2022-06-11T16:06:33Z INFO  redeemer] Native balance:           337685378527 KINT planck
+[2022-06-11T16:06:33Z INFO  redeemer] BTC balance:              74636 BTC sat
+[2022-06-11T16:06:33Z INFO  redeemer] Delta wrapped balance:    -5035 KBTC sat
+[2022-06-11T16:06:33Z INFO  redeemer] Delta collateral balance: 0 KSM planck
+[2022-06-11T16:06:33Z INFO  redeemer] Delta native balance:     -469082900 KINT planck
+[2022-06-11T16:06:33Z INFO  redeemer] Delta BTC balance:        0 BTC sat
+[2022-06-11T16:06:33Z INFO  redeemer] Waiting 10 seconds before next loop iteration
+[2022-06-11T16:06:44Z INFO  redeemer] [10]-------------------------------
+[2022-06-11T16:06:44Z INFO  redeemer] Max KBTC redeem amount for this iteration: 15000 
+[2022-06-11T16:06:44Z INFO  redeemer] Sufficient KBTC balance to attempt premium redeems
+[2022-06-11T16:06:44Z INFO  redeemer] Found vault 5H6MkGXDz3f1BYQx3DcfjBs3i4cHixAKzh221aXd7V45ojeN with capacity 125
+[2022-06-11T16:06:44Z INFO  redeemer] Redeem request amount  125 KBTC Sat is below dust level
+[2022-06-11T16:06:44Z INFO  redeemer] Waiting 60 seconds before checking again
+``` 
+### Example executions of the Redeemer on the Kintsugi network
+
+Below we execute the Redeemer on the Kintsugi network. No Premium Vaults are available
+> ./target/kintsugi/release/redeemer \
+  --bitcoin-rpc-url http://localhost:8332 \
+  --bitcoin-rpc-user premium \
+  --bitcoin-rpc-pass botbotbot  \
+  --max-redeem-amount 100000 \
+  --sleeptime-not-enough-balance 200 \
+  --keyfile ../kintsugi_bot_test/keyfile.json
+[2022-06-16T04:50:36Z INFO  redeemer] Connected to Kintsugi parachain
+[2022-06-16T04:50:36Z INFO  redeemer] -------------------------------
+[2022-06-16T04:50:40Z INFO  redeemer] Connected to bitcoin Bitcoin network
+[2022-06-16T04:50:40Z INFO  redeemer] -------------------------------
+[2022-06-16T04:50:40Z INFO  redeemer] Parachain signer:           5DkmTr3NeLPkQqefuU7QMJHJsjoso8vbDQbiTEFjCae2ecpK
+[2022-06-16T04:50:40Z INFO  redeemer] 1 BTC confirmations required
+[2022-06-16T04:50:40Z INFO  redeemer] Max redeem amount:          100000 KBTC sat
+[2022-06-16T04:50:40Z INFO  redeemer] Min wrapped balance:        5000 KBTC sat
+[2022-06-16T04:50:40Z INFO  redeemer] Initial wrapped balance:    40908 KBTC sat
+[2022-06-16T04:50:40Z INFO  redeemer] Initial collateral balance: 0 KSM planck
+[2022-06-16T04:50:40Z INFO  redeemer] Initial native balance:     135359201482 KINT planck
+[2022-06-16T04:50:40Z INFO  redeemer] Initial BTC balance:        0 BTC sat
+[2022-06-16T04:50:40Z INFO  redeemer] [1]-------------------------------
+[2022-06-16T04:50:40Z INFO  redeemer] Max KBTC redeem amount for this iteration: 40908
+[2022-06-16T04:50:40Z INFO  redeemer] Sufficient KBTC balance to attempt premium redeems
+[2022-06-16T04:50:40Z WARN  redeemer] No premium redeem vault found
+[2022-06-16T04:50:40Z INFO  redeemer] Waiting 60 seconds before checking again
+[2022-06-16T04:51:41Z INFO  redeemer] [2]-------------------------------
+[2022-06-16T04:51:41Z INFO  redeemer] Max KBTC redeem amount for this iteration: 40908
+
+We then test the "treat all vaults as premium" option to confirm that redeems work
+
+> ./target/kintsugi/release/redeemer \
+  --bitcoin-rpc-url http://localhost:8332 \
+  --bitcoin-rpc-user premium \
+  --bitcoin-rpc-pass botbotbot  \
+  --max-redeem-amount 100000 \
+  --sleeptime-not-enough-balance 200 \
+  --keyfile ../kintsugi_bot_test/keyfile.json \
+  --treat-all-vaults-as-premium
+[2022-06-16T04:52:16Z INFO  redeemer] Connected to Kintsugi parachain
+[2022-06-16T04:52:16Z INFO  redeemer] -------------------------------
+[2022-06-16T04:52:17Z INFO  redeemer] Connected to bitcoin Bitcoin network
+[2022-06-16T04:52:17Z INFO  redeemer] -------------------------------
+[2022-06-16T04:52:17Z INFO  redeemer] Parachain signer:           5DkmTr3NeLPkQqefuU7QMJHJsjoso8vbDQbiTEFjCae2ecpK
+[2022-06-16T04:52:17Z INFO  redeemer] 1 BTC confirmations required
+[2022-06-16T04:52:17Z INFO  redeemer] Treat all vaults as premium (for testing)
+[2022-06-16T04:52:17Z INFO  redeemer] Max redeem amount:          100000 KBTC sat
+[2022-06-16T04:52:17Z INFO  redeemer] Min wrapped balance:        5000 KBTC sat
+[2022-06-16T04:52:17Z INFO  redeemer] Initial wrapped balance:    40908 KBTC sat
+[2022-06-16T04:52:17Z INFO  redeemer] Initial collateral balance: 0 KSM planck
+[2022-06-16T04:52:17Z INFO  redeemer] Initial native balance:     135359201482 KINT planck
+[2022-06-16T04:52:17Z INFO  redeemer] Initial BTC balance:        0 BTC sat
+[2022-06-16T04:52:17Z INFO  redeemer] [1]-------------------------------
+[2022-06-16T04:52:17Z INFO  redeemer] Max KBTC redeem amount for this iteration: 40908
+[2022-06-16T04:52:17Z INFO  redeemer] Sufficient KBTC balance to attempt premium redeems
+[2022-06-16T04:52:18Z INFO  redeemer] Found vault a3fudELrRCjuSyYEPkRAKFQyjzo5YyU228LdqinGsnjBUNB8P with capacity 15373639
+[2022-06-16T04:52:18Z INFO  redeemer] Redeem request amount  40908 KBTC Sat
+[2022-06-16T04:52:18Z INFO  redeemer] BTC receive address:        bc1q7wnj7avg39psd2svn2tmqzt7f058tsq2ttgcyf
+[2022-06-16T04:52:18Z INFO  redeemer] Sending redeem request to parachain to vault 5HmB7sj7CZK1YWdSWGT64DqR4zKo4utEq4uQAnCFaGovRx6S
+[2022-06-16T04:53:10Z INFO  redeemer] Parachain confirms redeem request of 40908 KBTC sat to BTC address bc1q7wnj7avg39psd2svn2tmqzt7f058tsq2ttgcyf
+[2022-06-16T04:53:10Z INFO  redeemer] Wrapped balance:          0 KBTC sat
+[2022-06-16T04:53:10Z INFO  redeemer] Collateral balance:       0 KSM planck
+[2022-06-16T04:53:10Z INFO  redeemer] Native balance:           135228667210 KINT planck
+[2022-06-16T04:53:10Z INFO  redeemer] BTC balance:              0 BTC sat
+[2022-06-16T04:53:10Z INFO  redeemer] Delta wrapped balance:    -40908 KBTC sat
+[2022-06-16T04:53:10Z INFO  redeemer] Delta collateral balance: 0 KSM planck
+[2022-06-16T04:53:10Z INFO  redeemer] Delta native balance:     -130534272 KINT planck
+[2022-06-16T04:53:10Z INFO  redeemer] Delta BTC balance:        0 BTC sat
+[2022-06-16T04:53:10Z INFO  redeemer] Waiting 10 seconds before next loop iteration
+[2022-06-16T04:53:20Z INFO  redeemer] [2]-------------------------------
+[2022-06-16T04:53:20Z INFO  redeemer] Max KBTC redeem amount for this iteration: 0
+[2022-06-16T04:53:20Z WARN  redeemer] KBTC balance (or max redeem amount) lower than minimum balance of 5000  Sat
+[2022-06-16T04:53:20Z INFO  redeemer] Waiting 200 seconds before checking again
+
+
+
+
+[^1]: We refer here to a Kintsugi Parachain, but the Premium BOT will work similarly in a Testnet or Interlay network. Just replace the Kintsugi, KBTC, KINT, KSM terms accordingly.
+[^2]: https://bitcoindevkit.org/
+[^3]: See https://docs.interlay.io/#/vault/installation?id=prerequisites
+[^4]: The extended master private key mentionned here is the actual key used on BTC Testnet to test the BOT during development. You can reuse it to confirm the BOT runs correctly. 
 

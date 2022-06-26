@@ -90,7 +90,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -483,7 +483,7 @@ version = "1.1.0"
 dependencies = [
  "async-trait",
  "backoff",
- "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "bitcoin 1.2.0",
  "bitcoincore-rpc",
  "clap",
  "esplora-btc-api",
@@ -507,25 +507,6 @@ dependencies = [
 name = "bitcoin"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
-dependencies = [
- "bitcoin_hashes 0.7.6",
- "frame-support",
- "hex",
- "impl-serde",
- "parity-scale-codec",
- "scale-info",
- "secp256k1 0.20.1",
- "serde",
- "sha2 0.8.2",
- "sp-core",
- "sp-std",
- "spin 0.7.1",
-]
-
-[[package]]
-name = "bitcoin"
-version = "1.2.0"
-source = "git+https://github.com/interlay/interbtc?rev=9bb83764669fed277a218e6a82876eb7f9028a94#9bb83764669fed277a218e6a82876eb7f9028a94"
 dependencies = [
  "bitcoin_hashes 0.7.6",
  "frame-support",
@@ -736,7 +717,7 @@ name = "btc-relay"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "bitcoin 1.2.0",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -749,16 +730,6 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
-]
-
-[[package]]
-name = "buf_redux"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b953a6887648bb07a535631f2bc00fbdb2a2216f135552cb3f534ed136b9c07f"
-dependencies = [
- "memchr",
- "safemem",
 ]
 
 [[package]]
@@ -775,22 +746,6 @@ name = "bumpalo"
 version = "3.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37ccbd214614c6783386c1af30caf03192f17891059cecc394b4fb119e363de3"
-
-[[package]]
-name = "burn"
-version = "0.0.2"
-dependencies = [
- "bitcoin 1.1.0",
- "clap",
- "common",
- "env_logger 0.9.0",
- "git-version",
- "log 0.4.17",
- "runtime",
- "thiserror",
- "tokio",
- "tracing",
-]
 
 [[package]]
 name = "byte-slice-cast"
@@ -1042,7 +997,7 @@ dependencies = [
  "clap",
  "env_logger 0.9.0",
  "impl-serde",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=9bb83764669fed277a218e6a82876eb7f9028a94)",
+ "interbtc-primitives",
  "log 0.4.17",
  "pad",
  "runtime",
@@ -1353,7 +1308,7 @@ source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24
 dependencies = [
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "mocktopus",
  "orml-tokens",
  "orml-traits",
@@ -1748,38 +1703,12 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aafcde04e90a5226a6443b7aabdb016ba2f8307c847d524724bd9b346dd1a2d3"
-dependencies = [
- "atty",
- "humantime 1.3.0",
- "log 0.4.17",
- "regex",
- "termcolor",
-]
-
-[[package]]
-name = "env_logger"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44533bbbb3bb3c1fa17d9f2e4e38bbbaf8396ba82193c4cb1b6445d711445d36"
-dependencies = [
- "atty",
- "humantime 1.3.0",
- "log 0.4.17",
- "regex",
- "termcolor",
-]
-
-[[package]]
-name = "env_logger"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
 dependencies = [
  "atty",
- "humantime 2.1.0",
+ "humantime",
  "log 0.4.17",
  "regex",
  "termcolor",
@@ -1792,7 +1721,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b2cf0344971ee6c64c31be0d530793fba457d322dfec2810c453d0ef228f9c3"
 dependencies = [
  "atty",
- "humantime 2.1.0",
+ "humantime",
  "log 0.4.17",
  "regex",
  "termcolor",
@@ -1833,7 +1762,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "parity-scale-codec",
  "reward",
  "scale-info",
@@ -1912,30 +1841,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "faucet"
-version = "1.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "clap",
- "env_logger 0.6.2",
- "futures 0.3.21",
- "git-version",
- "hex",
- "jsonrpc-http-server",
- "kv",
- "log 0.4.17",
- "parity-scale-codec",
- "runtime",
- "serde",
- "serde_json",
- "service",
- "sp-keyring",
- "thiserror",
- "tokio",
-]
-
-[[package]]
 name = "fdlimit"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1953,7 +1858,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "parity-scale-codec",
  "reward",
  "scale-info",
@@ -2446,15 +2351,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fxhash"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2597,7 +2493,7 @@ dependencies = [
  "indexmap",
  "slab",
  "tokio",
- "tokio-util 0.7.3",
+ "tokio-util",
  "tracing",
 ]
 
@@ -2646,31 +2542,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db0d4cf898abf0081f964436dc980e96670a0f36863e4b83aaacdb65c9d7ccc3"
 dependencies = [
  "ahash",
-]
-
-[[package]]
-name = "headers"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cff78e5788be1e0ab65b04d306b2ed5092c815ec97ec70f4ebd5aee158aa55d"
-dependencies = [
- "base64 0.13.0",
- "bitflags",
- "bytes",
- "headers-core",
- "http",
- "httpdate",
- "mime 0.3.16",
- "sha-1 0.10.0",
-]
-
-[[package]]
-name = "headers-core"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7f66481bfee273957b1f20485a4ff3362987f85b2c236580d81b4eb7a326429"
-dependencies = [
- "http",
 ]
 
 [[package]]
@@ -2803,15 +2674,6 @@ name = "httpdate"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4a1e36c821dbe04574f602848a19f742f4fb3c98d40449f11bcad18d6b17421"
-
-[[package]]
-name = "humantime"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df004cfca50ef23c36850aaaa59ad52cc70d0e90243c3c7737a4dd32dc7a3c4f"
-dependencies = [
- "quick-error",
-]
 
 [[package]]
 name = "humantime"
@@ -3010,23 +2872,7 @@ name = "interbtc-primitives"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
- "bstringify",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "sp-core",
- "sp-runtime",
- "sp-std",
- "xcm",
-]
-
-[[package]]
-name = "interbtc-primitives"
-version = "1.2.0"
-source = "git+https://github.com/interlay/interbtc?rev=9bb83764669fed277a218e6a82876eb7f9028a94#9bb83764669fed277a218e6a82876eb7f9028a94"
-dependencies = [
- "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=9bb83764669fed277a218e6a82876eb7f9028a94)",
+ "bitcoin 1.2.0",
  "bstringify",
  "parity-scale-codec",
  "scale-info",
@@ -3043,7 +2889,7 @@ version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
  "futures 0.3.21",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "jsonrpsee 0.13.1",
  "module-btc-relay-rpc",
  "module-issue-rpc",
@@ -3083,8 +2929,8 @@ dependencies = [
  "frame-support",
  "frame-system",
  "frame-system-rpc-runtime-api",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
- "issue 1.2.0",
+ "interbtc-primitives",
+ "issue",
  "module-btc-relay-rpc-runtime-api",
  "module-issue-rpc-runtime-api",
  "module-oracle-rpc-runtime-api",
@@ -3094,7 +2940,7 @@ dependencies = [
  "module-replace-rpc-runtime-api",
  "module-vault-registry-rpc-runtime-api",
  "nomination",
- "oracle 1.2.0",
+ "oracle",
  "orml-asset-registry",
  "orml-tokens",
  "orml-traits",
@@ -3117,7 +2963,7 @@ dependencies = [
  "pallet-treasury",
  "pallet-utility",
  "parity-scale-codec",
- "redeem 1.2.0",
+ "redeem",
  "refund",
  "relay",
  "replace",
@@ -3150,13 +2996,13 @@ name = "interbtc-standalone"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "bitcoin 1.2.0",
  "clap",
  "frame-benchmarking",
  "frame-benchmarking-cli",
  "frame-support",
  "hex-literal",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "interbtc-rpc",
  "interbtc-runtime-standalone",
  "log 0.4.17",
@@ -3223,35 +3069,18 @@ checksum = "879d54834c8c76457ef4293a689b2a8c59b076067ad77b15efafbb05f92a592b"
 
 [[package]]
 name = "issue"
-version = "0.0.2"
-dependencies = [
- "bitcoin 0.27.1",
- "bitcoin 1.1.0",
- "clap",
- "common",
- "env_logger 0.9.0",
- "git-version",
- "log 0.4.17",
- "runtime",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "issue"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "bitcoin 1.2.0",
  "btc-relay",
  "currency",
  "fee",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
- "oracle 1.2.0",
+ "interbtc-primitives",
+ "oracle",
  "orml-tokens",
  "orml-traits",
  "pallet-timestamp",
@@ -3266,6 +3095,22 @@ dependencies = [
  "sp-runtime",
  "sp-std",
  "vault-registry",
+]
+
+[[package]]
+name = "issuer"
+version = "0.0.2"
+dependencies = [
+ "bitcoin 1.1.0",
+ "clap",
+ "common",
+ "env_logger 0.9.0",
+ "git-version",
+ "log 0.4.17",
+ "runtime",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -3320,99 +3165,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "jsonrpc-client-transports"
-version = "18.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2b99d4207e2a04fb4581746903c2bb7eb376f88de9c699d0f3e10feeac0cd3a"
-dependencies = [
- "derive_more",
- "futures 0.3.21",
- "hyper 0.14.19",
- "hyper-tls",
- "jsonrpc-core",
- "jsonrpc-pubsub",
- "log 0.4.17",
- "serde",
- "serde_json",
- "tokio",
- "url 1.7.2",
-]
-
-[[package]]
-name = "jsonrpc-core"
-version = "18.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14f7f76aef2d054868398427f6c54943cf3d1caa9a7ec7d0c38d69df97a965eb"
-dependencies = [
- "futures 0.3.21",
- "futures-executor",
- "futures-util",
- "log 0.4.17",
- "serde",
- "serde_derive",
- "serde_json",
-]
-
-[[package]]
-name = "jsonrpc-core-client"
-version = "18.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b51da17abecbdab3e3d4f26b01c5ec075e88d3abe3ab3b05dc9aa69392764ec0"
-dependencies = [
- "futures 0.3.21",
- "jsonrpc-client-transports",
-]
-
-[[package]]
-name = "jsonrpc-http-server"
-version = "18.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1dea6e07251d9ce6a552abfb5d7ad6bc290a4596c8dcc3d795fae2bbdc1f3ff"
-dependencies = [
- "futures 0.3.21",
- "hyper 0.14.19",
- "jsonrpc-core",
- "jsonrpc-server-utils",
- "log 0.4.17",
- "net2",
- "parking_lot 0.11.2",
- "unicase 2.6.0",
-]
-
-[[package]]
-name = "jsonrpc-pubsub"
-version = "18.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "240f87695e6c6f62fb37f05c02c04953cf68d6408b8c1c89de85c7a0125b1011"
-dependencies = [
- "futures 0.3.21",
- "jsonrpc-core",
- "lazy_static",
- "log 0.4.17",
- "parking_lot 0.11.2",
- "rand 0.7.3",
- "serde",
-]
-
-[[package]]
-name = "jsonrpc-server-utils"
-version = "18.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa4fdea130485b572c39a460d50888beb00afb3e35de23ccd7fad8ff19f0e0d4"
-dependencies = [
- "bytes",
- "futures 0.3.21",
- "globset",
- "jsonrpc-core",
- "lazy_static",
- "log 0.4.17",
- "tokio",
- "tokio-stream",
- "tokio-util 0.6.10",
- "unicase 2.6.0",
-]
-
-[[package]]
 name = "jsonrpsee"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3456,7 +3208,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-rustls",
- "tokio-util 0.7.3",
+ "tokio-util",
  "tracing",
  "webpki-roots",
 ]
@@ -3623,7 +3375,7 @@ dependencies = [
  "serde_json",
  "soketto",
  "tokio",
- "tokio-util 0.7.3",
+ "tokio-util",
  "tracing",
 ]
 
@@ -3644,19 +3396,6 @@ name = "keccak"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9b7d56ba4a8344d6be9729995e6b06f928af29998cdf79fe390cbf6b1fee838"
-
-[[package]]
-name = "kv"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c56bac60e13594bf7a8f12f7d592ece96ab30daa0fcaf533dfba2815838fc8e"
-dependencies = [
- "serde",
- "serde_json",
- "sled",
- "thiserror",
- "toml",
-]
 
 [[package]]
 name = "kv-log-macro"
@@ -4960,24 +4699,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
-name = "multipart"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00dec633863867f29cb39df64a397cdf4a6354708ddd7759f70c7fb51c5f9182"
-dependencies = [
- "buf_redux",
- "httparse",
- "log 0.4.17",
- "mime 0.3.16",
- "mime_guess",
- "quick-error",
- "rand 0.8.5",
- "safemem",
- "tempfile",
- "twoway",
-]
-
-[[package]]
 name = "multistream-select"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5045,17 +4766,6 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "tempfile",
-]
-
-[[package]]
-name = "net2"
-version = "0.2.37"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "391630d12b68002ae1e25e8f974306474966550ad82dac6886fb8910c19568ae"
-dependencies = [
- "cfg-if 0.1.10",
- "libc",
- "winapi",
 ]
 
 [[package]]
@@ -5168,8 +4878,8 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
- "oracle 1.2.0",
+ "interbtc-primitives",
+ "oracle",
  "orml-tokens",
  "orml-traits",
  "pallet-timestamp",
@@ -5407,23 +5117,6 @@ dependencies = [
 
 [[package]]
 name = "oracle"
-version = "1.1.0"
-dependencies = [
- "backoff",
- "chrono",
- "clap",
- "env_logger 0.7.1",
- "futures 0.3.21",
- "git-version",
- "log 0.4.17",
- "reqwest",
- "runtime",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "oracle"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
@@ -5431,7 +5124,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "pallet-timestamp",
  "parity-scale-codec",
  "scale-info",
@@ -6760,34 +6453,18 @@ dependencies = [
 
 [[package]]
 name = "redeem"
-version = "0.0.2"
-dependencies = [
- "bitcoin 1.1.0",
- "clap",
- "common",
- "env_logger 0.9.0",
- "git-version",
- "log 0.4.17",
- "runtime",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "redeem"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "bitcoin 1.2.0",
  "btc-relay",
  "currency",
  "fee",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
- "oracle 1.2.0",
+ "interbtc-primitives",
+ "oracle",
  "orml-tokens",
  "orml-traits",
  "pallet-timestamp",
@@ -6801,6 +6478,23 @@ dependencies = [
  "sp-runtime",
  "sp-std",
  "vault-registry",
+]
+
+[[package]]
+name = "redeemer"
+version = "0.0.2"
+dependencies = [
+ "bitcoin 1.1.0",
+ "clap",
+ "common",
+ "env_logger 0.9.0",
+ "git-version",
+ "log 0.4.17",
+ "module-oracle-rpc-runtime-api",
+ "runtime",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -6848,15 +6542,15 @@ name = "refund"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "bitcoin 1.2.0",
  "btc-relay",
  "currency",
  "fee",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
- "oracle 1.2.0",
+ "interbtc-primitives",
+ "oracle",
  "orml-tokens",
  "orml-traits",
  "pallet-timestamp",
@@ -6926,20 +6620,20 @@ name = "relay"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "bitcoin 1.2.0",
  "btc-relay",
  "currency",
  "fee",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "nomination",
- "oracle 1.2.0",
+ "oracle",
  "orml-tokens",
  "orml-traits",
  "parity-scale-codec",
- "redeem 1.2.0",
+ "redeem",
  "refund",
  "replace",
  "scale-info",
@@ -6967,16 +6661,16 @@ name = "replace"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "bitcoin 1.2.0",
  "btc-relay",
  "currency",
  "fee",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "nomination",
- "oracle 1.2.0",
+ "oracle",
  "orml-tokens",
  "orml-traits",
  "pallet-timestamp",
@@ -7054,7 +6748,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -7133,14 +6827,14 @@ dependencies = [
  "async-trait",
  "backoff",
  "bitcoin 1.1.0",
- "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "bitcoin 1.2.0",
  "btc-relay",
  "cfg-if 1.0.0",
  "clap",
  "env_logger 0.8.4",
  "frame-support",
  "futures 0.3.21",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "interbtc-standalone",
  "jsonrpsee 0.10.1",
  "log 0.4.17",
@@ -8296,12 +7990,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scoped-tls"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea6a9290e3c9cf0f18145ef7ffa62d68ee0bf5fcd651017e586dc7fd5da448c2"
-
-[[package]]
 name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8498,27 +8186,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "service"
-version = "1.1.0"
-dependencies = [
- "async-trait",
- "bitcoin 1.1.0",
- "clap",
- "futures 0.3.21",
- "hyper 0.14.19",
- "hyper-tls",
- "runtime",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-futures",
- "tracing-subscriber",
- "warp",
-]
-
-[[package]]
 name = "sha-1"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8541,17 +8208,6 @@ dependencies = [
  "cpufeatures",
  "digest 0.9.0",
  "opaque-debug 0.3.0",
-]
-
-[[package]]
-name = "sha-1"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "028f48d513f9678cda28f6e4064755b3fbb2af6acd672f2c209b62323f7aea0f"
-dependencies = [
- "cfg-if 1.0.0",
- "cpufeatures",
- "digest 0.10.3",
 ]
 
 [[package]]
@@ -8673,22 +8329,6 @@ name = "slab"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb703cfe953bccee95685111adeedb76fabe4e97549a58d16f03ea7b9367bb32"
-
-[[package]]
-name = "sled"
-version = "0.34.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f96b4737c2ce5987354855aed3797279def4ebf734436c6aa4552cf8e169935"
-dependencies = [
- "crc32fast",
- "crossbeam-epoch",
- "crossbeam-utils",
- "fs2",
- "fxhash",
- "libc",
- "log 0.4.17",
- "parking_lot 0.11.2",
-]
 
 [[package]]
 name = "smallvec"
@@ -9459,7 +9099,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "orml-tokens",
  "orml-traits",
  "parity-scale-codec",
@@ -9684,7 +9324,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -9936,16 +9576,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-metrics"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcb585a0069b53171684e22d5255984ec30d1c7304fd0a4a9a603ffd8c765cdd"
-dependencies = [
- "futures-util",
- "pin-project-lite 0.2.9",
-]
-
-[[package]]
 name = "tokio-native-tls"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9964,44 +9594,6 @@ dependencies = [
  "rustls",
  "tokio",
  "webpki",
-]
-
-[[package]]
-name = "tokio-stream"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df54d54117d6fdc4e4fea40fe1e4e566b3505700e148a6827e59b34b0d2600d9"
-dependencies = [
- "futures-core",
- "pin-project-lite 0.2.9",
- "tokio",
-]
-
-[[package]]
-name = "tokio-tungstenite"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "511de3f85caf1c98983545490c3d09685fa8eb634e57eec22bb4db271f46cbd8"
-dependencies = [
- "futures-util",
- "log 0.4.17",
- "pin-project 1.0.10",
- "tokio",
- "tungstenite",
-]
-
-[[package]]
-name = "tokio-util"
-version = "0.6.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36943ee01a6d67977dd3f84a5a1d2efeb4ada3a1ae771cadfaa535d9d9fc6507"
-dependencies = [
- "bytes",
- "futures-core",
- "futures-sink",
- "log 0.4.17",
- "pin-project-lite 0.2.9",
- "tokio",
 ]
 
 [[package]]
@@ -10131,22 +9723,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 
 [[package]]
-name = "transfer"
-version = "0.0.1"
-dependencies = [
- "bitcoin 1.1.0",
- "clap",
- "common",
- "env_logger 0.9.0",
- "git-version",
- "log 0.4.17",
- "runtime",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "trie-db"
 version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10222,34 +9798,6 @@ name = "tt-call"
 version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e66dcbec4290c69dd03c57e76c2469ea5c7ce109c6dd4351c13055cf71ea055"
-
-[[package]]
-name = "tungstenite"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0b2d8558abd2e276b0a8df5c05a2ec762609344191e5fd23e292c910e9165b5"
-dependencies = [
- "base64 0.13.0",
- "byteorder",
- "bytes",
- "http",
- "httparse",
- "log 0.4.17",
- "rand 0.8.5",
- "sha-1 0.9.8",
- "thiserror",
- "url 2.2.2",
- "utf-8",
-]
-
-[[package]]
-name = "twoway"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59b11b2b5241ba34be09c3cc85a36e56e48f9888862e19cedf23336d35316ed1"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "twox-hash"
@@ -10402,12 +9950,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "utf-8"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
-
-[[package]]
 name = "valuable"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10424,51 +9966,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "vault"
-version = "1.1.0"
-dependencies = [
- "async-trait",
- "bitcoin 1.1.0",
- "clap",
- "frame-support",
- "futures 0.3.21",
- "git-version",
- "hex",
- "jsonrpc-core",
- "jsonrpc-core-client",
- "lazy_static",
- "mockall",
- "parity-scale-codec",
- "runtime",
- "serde",
- "service",
- "sha2 0.8.2",
- "sp-arithmetic",
- "sp-core",
- "sp-keyring",
- "thiserror",
- "tokio",
- "tokio-metrics",
- "tracing",
- "tracing-futures",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "vault-registry"
 version = "1.2.0"
 source = "git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7#825030f2caaf741c811568b24d42d1a2547810f7"
 dependencies = [
- "bitcoin 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "bitcoin 1.2.0",
  "currency",
  "fee",
  "fixed-hash",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "interbtc-primitives 1.2.0 (git+https://github.com/interlay/interbtc?rev=825030f2caaf741c811568b24d42d1a2547810f7)",
+ "interbtc-primitives",
  "log 0.4.17",
- "oracle 1.2.0",
+ "oracle",
  "orml-tokens",
  "orml-traits",
  "pallet-timestamp",
@@ -10534,36 +10045,6 @@ checksum = "1ce8a968cb1cd110d136ff8b819a556d6fb6d919363c61534f6860c7eb172ba0"
 dependencies = [
  "log 0.4.17",
  "try-lock",
-]
-
-[[package]]
-name = "warp"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cef4e1e9114a4b7f1ac799f16ce71c14de5778500c5450ec6b7b920c55b587e"
-dependencies = [
- "bytes",
- "futures-channel",
- "futures-util",
- "headers",
- "http",
- "hyper 0.14.19",
- "log 0.4.17",
- "mime 0.3.16",
- "mime_guess",
- "multipart",
- "percent-encoding 2.1.0",
- "pin-project 1.0.10",
- "scoped-tls",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "tokio",
- "tokio-stream",
- "tokio-tungstenite",
- "tokio-util 0.6.10",
- "tower-service",
- "tracing",
 ]
 
 [[package]]

@@ -1,18 +1,16 @@
 [workspace]
 members = [
-  "oracle",
-  "runtime",
-  "runtime/client",
-  "vault",
-  "bitcoin",
-  "faucet",
-  "service",
+  # "oracle",
+  # "runtime",
+  # "runtime/client",
+  # "vault",
+  # "bitcoin",
+  # "faucet",
   "cli/common",
   "cli/explore",
-  "cli/burn",
-  "cli/issue",
-  "cli/redeem",
-  "cli/transfer"
+  # "service",
+  "premium_bot/issuer",
+  "premium_bot/redeemer"
 ]
 
 [patch.crates-io]
