@@ -107,7 +107,7 @@ curl --data-binary '{"jsonrpc": "1.0", "id":"curltest", "method": "getnewaddress
 * Add to **redeem** Bitcoin Core BTC Wallet info to the redeem command (so as to generate )
 * The **redeem** command does not check if the vault specified in the command options is valid or has aenough redeemable tokens. In case of error the Extrinsic error is reported by the program. Add some error management.
 ## How to build
-Please read the prerequisites provided in the README_interlay.md file about how to build the interbtc-clients repository. Building the Premium BOT repository uses exactly the same process. You only need to select the correct branch.
+Please read the prerequisites provided in the README_interlay.md file about how to build the interbtc-clients repository. Building the Command Line Tool repository uses exactly the same process. You only need to select the correct branch.
 
 At the time of release of the project (20/6/2022) the main branch on Testnet and Kintsugi is 1.12.0 
 The corresponding Command Line Tool branch is cli1.12.0 (https://github.com/Kint0Sens/interbtc-clients-cli/tree/cli-1.12.0).
