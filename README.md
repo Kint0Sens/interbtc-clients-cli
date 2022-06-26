@@ -1,5 +1,7 @@
 # Premium BOT
 ## by Kint0Sens
+The current branch is not up to date to the lates upgrades of the Interlay parachains. As of 27/6/2022 pls use branch premium-bot-1.14.0
+
  part of the TRADING/ARBITRAGE BOTS bounty (https://github.com/interlay/bounties/issues/2)
 Contact: Discord Kint0Sens#9101
 
