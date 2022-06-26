@@ -1,5 +1,6 @@
 # Command line tools for vault operators and Kintsugi users
 ## by Kint0Sens
+**The current branch is not up to date to the lates upgrades of the Interlay parachains. As of 27/6/2022 pls use branch cli-1.14.0**
 
 ### part of the VAULT INTERFACE bounty (https://github.com/interlay/bounties/issues/1)
 
