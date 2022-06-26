@@ -6,7 +6,11 @@ use crate::{
     types::*,
     AccountId, CurrencyId, Error, InterBtcRuntime, InterBtcSigner, RetryPolicy, RichH256Le, SubxtError,
 };
-#[cfg(any(feature = "standalone-metadata", feature = "parachain-metadata-testnet"))]
+#[cfg(any(
+    feature = "standalone-metadata",
+    feature = "parachain-metadata-interlay-testnet",
+    feature = "parachain-metadata-kintsugi-testnet"
+))]
 use crate::{BTC_RELAY_MODULE, STABLE_BITCOIN_CONFIRMATIONS, STABLE_PARACHAIN_CONFIRMATIONS};
 use async_trait::async_trait;
 use codec::Encode;
@@ -34,15 +38,19 @@ cfg_if::cfg_if! {
         const DEFAULT_SPEC_NAME: &str = "interbtc-standalone";
         pub const SS58_PREFIX: u16 = 42;
     } else if #[cfg(feature = "parachain-metadata-interlay")] {
-        const DEFAULT_SPEC_VERSION: RangeInclusive<u32> = 3..=3;
+        const DEFAULT_SPEC_VERSION: RangeInclusive<u32> = 3..=4;
         const DEFAULT_SPEC_NAME: &str = "interlay-parachain";
         pub const SS58_PREFIX: u16 = 2032;
     } else if #[cfg(feature = "parachain-metadata-kintsugi")] {
-        const DEFAULT_SPEC_VERSION: RangeInclusive<u32> = 15..=16;
+        const DEFAULT_SPEC_VERSION: RangeInclusive<u32> = 19..=19;
         const DEFAULT_SPEC_NAME: &str = "kintsugi-parachain";
         pub const SS58_PREFIX: u16 = 2092;
-    } else if #[cfg(feature = "parachain-metadata-testnet")] {
-        const DEFAULT_SPEC_VERSION: RangeInclusive<u32> = 6..=7;
+    } else if #[cfg(feature = "parachain-metadata-interlay-testnet")] {
+        const DEFAULT_SPEC_VERSION: RangeInclusive<u32> = 8..=9;
+        const DEFAULT_SPEC_NAME: &str = "testnet-interlay";
+        pub const SS58_PREFIX: u16 = 42;
+    }  else if #[cfg(feature = "parachain-metadata-kintsugi-testnet")] {
+        const DEFAULT_SPEC_VERSION: RangeInclusive<u32> = 8..=9;
         const DEFAULT_SPEC_NAME: &str = "testnet-parachain";
         pub const SS58_PREFIX: u16 = 42;
     }
@@ -90,8 +98,8 @@ impl InterBtcParachain {
             log::info!("transaction_version={}", runtime_version.transaction_version);
         } else {
             return Err(Error::InvalidSpecVersion(
-                DEFAULT_SPEC_VERSION.start().clone(),
-                DEFAULT_SPEC_VERSION.end().clone(),
+                *DEFAULT_SPEC_VERSION.start(),
+                *DEFAULT_SPEC_VERSION.end(),
                 runtime_version.spec_version,
             ));
         }
@@ -240,6 +248,27 @@ impl InterBtcParachain {
         loop {
             on_block(sub.next().await.ok_or(Error::ChannelClosed)??).await?;
         }
+    }
+
+    /// Wait for the block at the given height
+    /// Note: will always wait at least one block.
+    pub async fn wait_for_block(&self, height: u32) -> Result<(), Error> {
+        let mut sub = self.ext_client.rpc().subscribe_finalized_blocks().await?;
+        while let Some(block) = sub.next().await {
+            if block?.number >= height {
+                return Ok(());
+            }
+        }
+        Err(Error::ChannelClosed)
+    }
+
+    /// Sleep for `delay` parachain blocks
+    pub async fn delay_for_blocks(&self, delay: u32) -> Result<(), Error> {
+        if delay == 0 {
+            return Ok(());
+        }
+        let starting_parachain_height = self.get_current_chain_height().await?;
+        self.wait_for_block(starting_parachain_height + delay).await
     }
 
     /// Subscription service that should listen forever, only returns if the initial subscription
@@ -1704,7 +1733,11 @@ pub trait SudoPallet {
     async fn set_replace_period(&self, period: u32) -> Result<(), Error>;
 }
 
-#[cfg(any(feature = "standalone-metadata", feature = "parachain-metadata-testnet"))]
+#[cfg(any(
+    feature = "standalone-metadata",
+    feature = "parachain-metadata-interlay-testnet",
+    feature = "parachain-metadata-kintsugi-testnet"
+))]
 #[async_trait]
 impl SudoPallet for InterBtcParachain {
     async fn sudo(&self, call: EncodedCall) -> Result<(), Error> {

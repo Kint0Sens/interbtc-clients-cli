@@ -157,7 +157,7 @@ async fn ensure_funding_allowed(
     let reserved_balance = parachain_rpc
         .get_reserved_balance_for_id(account_id.clone(), currency_id)
         .await?;
-    if free_balance + reserved_balance > MAX_FUNDABLE_CLIENT_BALANCE * currency_id.inner().one() {
+    if free_balance + reserved_balance > MAX_FUNDABLE_CLIENT_BALANCE * currency_id.inner()?.one() {
         log::warn!(
             "User {} has enough funds: {:?}",
             account_id,
@@ -199,7 +199,7 @@ async fn atomic_faucet_funding(
     currency_id: CurrencyId,
     allowances: HashMap<FundingRequestAccountType, u128>,
 ) -> Result<(), Error> {
-    let account_str = format!("{}-{}", account_id, currency_id.inner().symbol());
+    let account_str = format!("{}-{}", account_id, currency_id.inner()?.symbol());
     let last_request_json = kv.get(account_str.clone())?;
     let account_type = get_account_type(parachain_rpc, account_id.clone()).await?;
     ensure_funding_allowed(
@@ -214,13 +214,13 @@ async fn atomic_faucet_funding(
     let amount = allowances
         .get(&account_type)
         .ok_or(Error::NoFaucetAllowance)?
-        .checked_mul(currency_id.inner().one())
+        .checked_mul(currency_id.inner()?.one())
         .ok_or(Error::MathError)?;
 
     log::info!(
         "AccountId: {}, Currency: {:?} Type: {:?}, Amount: {}",
         account_id,
-        currency_id.inner().symbol(),
+        currency_id.inner()?.symbol(),
         account_type,
         amount
     );
@@ -359,7 +359,7 @@ mod tests {
             .expect("Unable to set exchange rate");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fund_user_once_succeeds() {
         let (client, tmp_dir) = default_provider_client(AccountKeyring::Alice).await;
         set_exchange_rate(client.clone()).await;
@@ -372,7 +372,7 @@ mod tests {
         allowances.insert(FundingRequestAccountType::User, user_allowance_dot);
         allowances.insert(FundingRequestAccountType::Vault, vault_allowance_dot);
         let testing_currency: CurrencyId = DEFAULT_TESTING_CURRENCY.into();
-        let expected_amount_planck: u128 = user_allowance_dot * testing_currency.inner().one();
+        let expected_amount_planck: u128 = user_allowance_dot * testing_currency.inner().unwrap().one();
 
         let store = Store::new(Config::new(tmp_dir.path().join("kv1"))).expect("Unable to open kv store");
         let kv = open_kv_store(store.clone()).unwrap();
@@ -400,7 +400,7 @@ mod tests {
         assert_eq!(bob_funds_before + expected_amount_planck, bob_funds_after);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fund_rich_user_fails() {
         let (client, tmp_dir) = default_provider_client(AccountKeyring::Alice).await;
         set_exchange_rate(client.clone()).await;
@@ -430,7 +430,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fund_user_immediately_after_registering_as_vault_succeeds() {
         let (client, tmp_dir) = default_provider_client(AccountKeyring::Alice).await;
         set_exchange_rate(client.clone()).await;
@@ -450,7 +450,7 @@ mod tests {
         allowances.insert(FundingRequestAccountType::User, user_allowance_dot);
         allowances.insert(FundingRequestAccountType::Vault, vault_allowance_dot);
         let testing_currency: CurrencyId = DEFAULT_TESTING_CURRENCY.into();
-        let expected_amount_planck: u128 = vault_allowance_dot * testing_currency.inner().one();
+        let expected_amount_planck: u128 = vault_allowance_dot * testing_currency.inner().unwrap().one();
 
         let store = Store::new(Config::new(tmp_dir.path().join("kv3"))).expect("Unable to open kv store");
         let kv = open_kv_store(store.clone()).unwrap();
@@ -505,7 +505,7 @@ mod tests {
         assert_eq!(bob_funds_before + expected_amount_planck, bob_funds_after);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fund_user_twice_in_a_row_fails() {
         let (client, tmp_dir) = default_provider_client(AccountKeyring::Alice).await;
         set_exchange_rate(client.clone()).await;
@@ -518,7 +518,7 @@ mod tests {
         allowances.insert(FundingRequestAccountType::User, user_allowance_dot);
         allowances.insert(FundingRequestAccountType::Vault, vault_allowance_dot);
         let testing_currency: CurrencyId = DEFAULT_TESTING_CURRENCY.into();
-        let expected_amount_planck: u128 = user_allowance_dot * testing_currency.inner().one();
+        let expected_amount_planck: u128 = user_allowance_dot * testing_currency.inner().unwrap().one();
 
         let store = Store::new(Config::new(tmp_dir.path().join("kv3"))).expect("Unable to open kv store");
         let kv = open_kv_store(store.clone()).unwrap();
@@ -555,7 +555,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fund_vault_once_succeeds() {
         let (client, tmp_dir) = default_provider_client(AccountKeyring::Alice).await;
         set_exchange_rate(client.clone()).await;
@@ -576,7 +576,7 @@ mod tests {
             allowances.insert(FundingRequestAccountType::User, user_allowance_dot);
             allowances.insert(FundingRequestAccountType::Vault, vault_allowance_dot);
             let rich_currency_id: CurrencyId = currency_id.into();
-            let expected_amount_planck: u128 = vault_allowance_dot * rich_currency_id.inner().one();
+            let expected_amount_planck: u128 = vault_allowance_dot * rich_currency_id.inner().unwrap().one();
 
             let bob_provider = setup_provider(client.clone(), AccountKeyring::Bob).await;
             if bob_provider.get_public_key().await.unwrap().is_none() {
@@ -618,7 +618,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fund_vault_twice_in_a_row_fails() {
         let (client, tmp_dir) = default_provider_client(AccountKeyring::Alice).await;
         set_exchange_rate(client.clone()).await;
@@ -638,7 +638,7 @@ mod tests {
         allowances.insert(FundingRequestAccountType::User, user_allowance_dot);
         allowances.insert(FundingRequestAccountType::Vault, vault_allowance_dot);
         let testing_currency: CurrencyId = DEFAULT_TESTING_CURRENCY.into();
-        let expected_amount_planck: u128 = vault_allowance_dot * testing_currency.inner().one();
+        let expected_amount_planck: u128 = vault_allowance_dot * testing_currency.inner().unwrap().one();
 
         let bob_provider = setup_provider(client.clone(), AccountKeyring::Bob).await;
         bob_provider.register_public_key(dummy_public_key()).await.unwrap();

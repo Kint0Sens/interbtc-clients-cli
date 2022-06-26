@@ -16,7 +16,7 @@ use runtime::{
 use sp_core::{H160, H256};
 use sp_keyring::AccountKeyring;
 use std::{sync::Arc, time::Duration};
-use vault::{self, Event as CancellationEvent, IssueRequests, VaultIdManager};
+use vault::{self, Event as CancellationEvent, IssueRequests, VaultIdManager, ZeroDelay};
 
 const TIMEOUT: Duration = Duration::from_secs(90);
 
@@ -108,7 +108,12 @@ async fn pay_redeem_from_vault_wallet(
                 let request = vault_provider.get_redeem_request(event.redeem_id).await.unwrap();
                 // step 1: create a spending transaction from some arbitrary address
                 let mut transaction = btc_rpc
-                    .create_transaction(request.btc_address, request.amount_btc as u64, Some(event.redeem_id))
+                    .create_transaction(
+                        request.btc_address,
+                        request.amount_btc as u64,
+                        1000,
+                        Some(event.redeem_id),
+                    )
                     .await
                     .unwrap();
                 let mut x = [3; 33];
@@ -198,10 +203,17 @@ async fn test_report_vault_theft_succeeds() {
     );
 
     let vaults = Arc::new(vault::Vaults::from(Default::default()));
+    let random_delay = ZeroDelay;
 
     test_service(
         join(
-            vault::service::monitor_btc_txs(btc_rpc.clone(), relayer_provider.clone(), 0, vaults.clone()),
+            vault::service::monitor_btc_txs(
+                btc_rpc.clone(),
+                relayer_provider.clone(),
+                random_delay.clone(),
+                0,
+                vaults.clone(),
+            ),
             vault::service::listen_for_wallet_updates(relayer_provider.clone(), btc_rpc.network(), vaults.clone()),
         ),
         async {
@@ -216,7 +228,7 @@ async fn test_report_vault_theft_succeeds() {
 
             // step 1: create a spending transaction from some arbitrary address
             let mut transaction = btc_rpc
-                .create_transaction(BtcAddress::P2PKH(H160::from_slice(&[4; 20])), 1500, None)
+                .create_transaction(BtcAddress::P2PKH(H160::from_slice(&[4; 20])), 1500, 1000, None)
                 .await
                 .unwrap();
             // set the hash in the input script. Note: p2wpkh needs to start with 2 or 3
@@ -283,11 +295,19 @@ async fn test_report_vault_double_payment_succeeds() {
 
         let vaults = Arc::new(vault::Vaults::from(Default::default()));
 
+        let random_delay = ZeroDelay;
+
         // we make the vault start two listen_for_redeem_requests processes, this way there will be a double payment
         // that should be reported
         test_service(
             join4(
-                vault::service::monitor_btc_txs(btc_rpc.clone(), relayer_provider.clone(), 0, vaults.clone()),
+                vault::service::monitor_btc_txs(
+                    btc_rpc.clone(),
+                    relayer_provider.clone(),
+                    random_delay.clone(),
+                    0,
+                    vaults.clone(),
+                ),
                 vault::service::listen_for_wallet_updates(relayer_provider.clone(), btc_rpc.network(), vaults.clone()),
                 pay_redeem_from_vault_wallet(vault_provider.clone(), btc_rpc.clone(), 2, vault_id.clone()),
                 pay_redeem_from_vault_wallet(vault_provider.clone(), btc_rpc.clone(), 3, vault_id.clone()),
@@ -753,7 +773,13 @@ async fn test_cancellation_succeeds() {
                         for _ in 0u32..2 {
                             assert_ok!(
                                 btc_rpc
-                                    .send_to_address(BtcAddress::P2PKH(H160::from_slice(&[0; 20])), 100_000, None, 1)
+                                    .send_to_address(
+                                        BtcAddress::P2PKH(H160::from_slice(&[0; 20])),
+                                        100_000,
+                                        None,
+                                        1000,
+                                        1
+                                    )
                                     .await
                             );
                         }
@@ -814,6 +840,7 @@ async fn test_refund_succeeds() {
                     issue.vault_address,
                     (issue.amount + issue.fee) as u64 + over_payment,
                     None,
+                    1000,
                     0,
                 )
                 .await
@@ -895,6 +922,7 @@ async fn test_issue_overpayment_succeeds() {
                     issue.vault_address,
                     (issue.amount + issue.fee) as u64 * over_payment_factor as u64,
                     None,
+                    1000,
                     0,
                 )
                 .await
@@ -943,12 +971,13 @@ async fn test_automatic_issue_execution_succeeds() {
         let vault_collateral =
             get_required_vault_collateral_for_issue(&vault1_provider, issue_amount, vault1_id.collateral_currency())
                 .await;
+
         assert_ok!(
             vault1_provider
                 .register_vault_with_public_key(
                     &vault1_id,
                     vault_collateral,
-                    btc_rpc.get_new_public_key().await.unwrap(),
+                    btc_rpc.get_new_public_key().await.unwrap()
                 )
                 .await
         );
@@ -957,7 +986,7 @@ async fn test_automatic_issue_execution_succeeds() {
                 .register_vault_with_public_key(
                     &vault2_id,
                     vault_collateral,
-                    btc_rpc.get_new_public_key().await.unwrap(),
+                    btc_rpc.get_new_public_key().await.unwrap()
                 )
                 .await
         );
@@ -968,16 +997,19 @@ async fn test_automatic_issue_execution_succeeds() {
 
             assert_ok!(
                 btc_rpc
-                    .send_to_address(issue.vault_address, (issue.amount + issue.fee) as u64, None, 0)
+                    .send_to_address(issue.vault_address, (issue.amount + issue.fee) as u64, None, 1000, 0)
                     .await
             );
 
             // wait for vault2 to execute this issue
-            assert_event::<ExecuteIssueEvent, _>(TIMEOUT, user_provider.clone(), move |x| x.vault_id == vault1_id)
-                .await;
+            assert_event::<ExecuteIssueEvent, _>(TIMEOUT, user_provider.clone(), move |x| {
+                x.vault_id == vault1_id.clone()
+            })
+            .await;
         };
 
         let issue_set = Arc::new(IssueRequests::new());
+        let random_delay = ZeroDelay;
         let (issue_event_tx, _issue_event_rx) = mpsc::channel::<CancellationEvent>(16);
         let service = join(
             vault::service::listen_for_issue_requests(
@@ -986,7 +1018,14 @@ async fn test_automatic_issue_execution_succeeds() {
                 issue_event_tx.clone(),
                 issue_set.clone(),
             ),
-            vault::service::process_issue_requests(btc_rpc.clone(), vault2_provider.clone(), issue_set.clone(), 1, 0),
+            vault::service::process_issue_requests(
+                btc_rpc.clone(),
+                vault2_provider.clone(),
+                issue_set.clone(),
+                1,
+                0,
+                random_delay,
+            ),
         );
 
         test_service(service, fut_user).await;
@@ -1042,7 +1081,13 @@ async fn test_automatic_issue_execution_succeeds_with_big_transaction() {
 
             assert_ok!(
                 btc_rpc
-                    .send_to_address_with_many_outputs(issue.vault_address, (issue.amount + issue.fee) as u64, None, 0)
+                    .send_to_address_with_many_outputs(
+                        issue.vault_address,
+                        (issue.amount + issue.fee) as u64,
+                        None,
+                        1000,
+                        0
+                    )
                     .await
             );
 
@@ -1052,6 +1097,7 @@ async fn test_automatic_issue_execution_succeeds_with_big_transaction() {
         };
 
         let issue_set = Arc::new(IssueRequests::new());
+        let random_delay = ZeroDelay;
         let (issue_event_tx, _issue_event_rx) = mpsc::channel::<CancellationEvent>(16);
         let service = join(
             vault::service::listen_for_issue_requests(
@@ -1060,7 +1106,14 @@ async fn test_automatic_issue_execution_succeeds_with_big_transaction() {
                 issue_event_tx.clone(),
                 issue_set.clone(),
             ),
-            vault::service::process_issue_requests(btc_rpc.clone(), vault2_provider.clone(), issue_set.clone(), 1, 0),
+            vault::service::process_issue_requests(
+                btc_rpc.clone(),
+                vault2_provider.clone(),
+                issue_set.clone(),
+                1,
+                0,
+                random_delay,
+            ),
         );
 
         test_service(service, fut_user).await;
@@ -1114,12 +1167,12 @@ async fn test_execute_open_requests_succeeds() {
         // send btc for redeem 0
         assert_ok!(
             btc_rpc
-                .send_to_address(address, redeems[0].amount_btc as u64, Some(redeem_ids[0]), 0)
+                .send_to_address(address, redeems[0].amount_btc as u64, Some(redeem_ids[0]), 1000, 0)
                 .await
         );
 
         let transaction = btc_rpc
-            .create_transaction(address, redeems[1].amount_btc as u64, Some(redeem_ids[1]))
+            .create_transaction(address, redeems[1].amount_btc as u64, 1000, Some(redeem_ids[1]))
             .await
             .unwrap()
             .transaction;

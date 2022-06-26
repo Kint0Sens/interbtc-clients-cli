@@ -4,7 +4,7 @@ use subxt::sp_core::{crypto::Ss58Codec, sr25519::Pair as KeyPair};
 
 pub use primitives::{
     CurrencyId,
-    CurrencyId::Token,
+    CurrencyId::{ForeignAsset, Token},
     TokenSymbol::{DOT, IBTC, INTR, KBTC, KINT, KSM},
 };
 
@@ -110,8 +110,10 @@ mod metadata_aliases {
     pub type EncodedCall = metadata::runtime_types::interlay_runtime_parachain::Call;
     #[cfg(feature = "parachain-metadata-kintsugi")]
     pub type EncodedCall = metadata::runtime_types::kintsugi_runtime_parachain::Call;
-    #[cfg(feature = "parachain-metadata-testnet")]
-    pub type EncodedCall = metadata::runtime_types::testnet_runtime_parachain::Call;
+    #[cfg(feature = "parachain-metadata-interlay-testnet")]
+    pub type EncodedCall = metadata::runtime_types::testnet_interlay_runtime_parachain::Call;
+    #[cfg(feature = "parachain-metadata-kintsugi-testnet")]
+    pub type EncodedCall = metadata::runtime_types::testnet_kintsugi_runtime_parachain::Call;
     #[cfg(feature = "standalone-metadata")]
     pub type EncodedCall = metadata::runtime_types::interbtc_runtime_standalone::Call;
 
@@ -132,15 +134,17 @@ impl From<[u8; 33]> for crate::BtcPublicKey {
 
 mod currency_id {
     use super::*;
+    use crate::Error;
 
     pub trait CurrencyIdExt {
-        fn inner(&self) -> primitives::TokenSymbol;
+        fn inner(&self) -> Result<primitives::TokenSymbol, Error>;
     }
 
     impl CurrencyIdExt for CurrencyId {
-        fn inner(&self) -> primitives::TokenSymbol {
+        fn inner(&self) -> Result<primitives::TokenSymbol, Error> {
             match self {
-                Token(x) => *x,
+                Token(x) => Ok(*x),
+                ForeignAsset(_) => Err(Error::CurrencyNotFound),
             }
         }
     }
@@ -193,8 +197,14 @@ mod vault_id {
             format!(
                 "{}[{}->{}]",
                 self.account_id.pretty_print(),
-                collateral_currency.inner().symbol(),
-                wrapped_currency.inner().symbol()
+                collateral_currency
+                    .inner()
+                    .map(|i| i.symbol().to_string())
+                    .unwrap_or_default(),
+                wrapped_currency
+                    .inner()
+                    .map(|i| i.symbol().to_string())
+                    .unwrap_or_default()
             )
         }
     }
