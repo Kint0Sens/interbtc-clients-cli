@@ -1,7 +1,6 @@
 use crate::{error::Error, metrics::update_bitcoin_metrics, system::VaultData, VaultIdManager};
 use bitcoin::{
-    BitcoinCoreApi, PartialAddress, Transaction, TransactionExt, TransactionMetadata,
-    BLOCK_INTERVAL as BITCOIN_BLOCK_INTERVAL,
+    BitcoinCoreApi, Transaction, TransactionExt, TransactionMetadata, BLOCK_INTERVAL as BITCOIN_BLOCK_INTERVAL,
 };
 use futures::{
     stream::{self, StreamExt},
@@ -244,31 +243,6 @@ impl Request {
         let recipient = tx.recipient.clone();
         tracing::info!("Sending bitcoin to {}", recipient);
 
-        let return_to_self_addresses = tx
-            .transaction
-            .extract_output_addresses()
-            .into_iter()
-            .filter(|x| x != &self.btc_address)
-            .collect::<Vec<_>>();
-
-        // register return-to-self address if it exists
-        match return_to_self_addresses.as_slice() {
-            [] => {} // no return-to-self
-            [address] => {
-                // one return-to-self address, make sure it is registered
-                let wallet = parachain_rpc.get_vault(&vault_id).await?.wallet;
-                if !wallet.addresses.contains(address) {
-                    let readable_address = address
-                        .encode_str(btc_rpc.network())
-                        .unwrap_or(format!("{:?}", address));
-                    tracing::info!("Registering address {:?}", readable_address);
-                    parachain_rpc.register_address(&vault_id, *address).await?;
-                    tracing::debug!("Successfully registered address {:?}", readable_address);
-                }
-            }
-            _ => return Err(Error::TooManyReturnToSelfAddresses),
-        };
-
         let txid = btc_rpc.send_transaction(tx).await?;
 
         loop {
@@ -408,7 +382,8 @@ pub async fn execute_open_requests<B: BitcoinCoreApi + Clone + Send + Sync + 'st
         None => return Ok(()), // the iterator is empty so we have nothing to do
     };
 
-    // iterate through transactions in reverse order, starting from those in the mempool
+    // iterate through transactions in reverse order, starting from those in the mempool, and
+    // gracefully fail on encountering a pruned blockchain
     let mut transaction_stream = bitcoin::reverse_stream_transactions(&read_only_btc_rpc, btc_start_height).await?;
     while let Some(result) = transaction_stream.next().await {
         let tx = match result {
@@ -546,7 +521,7 @@ fn get_request_for_btc_tx(tx: &Transaction, hash_map: &HashMap<H256, Request>) -
     }
 }
 
-#[cfg(all(test, feature = "standalone-metadata"))]
+#[cfg(all(test, feature = "parachain-metadata-kintsugi-testnet"))]
 mod tests {
     use crate::metrics::PerCurrencyMetrics;
 
@@ -558,8 +533,8 @@ mod tests {
     };
     use jsonrpc_core::serde_json::{Map, Value};
     use runtime::{
-        AccountId, BlockNumber, BtcPublicKey, CurrencyId, Error as RuntimeError, ErrorCode, InterBtcRichBlockHeader,
-        InterBtcVault, OracleKey, StatusCode, Token, DOT, IBTC,
+        AccountId, AssetMetadata, BitcoinBlockHeight, BlockNumber, BtcPublicKey, CurrencyId, Error as RuntimeError,
+        ErrorCode, InterBtcRichBlockHeader, InterBtcVault, OracleKey, RawBlockHeader, StatusCode, Token, DOT, IBTC,
     };
     use sp_core::H160;
     use std::collections::BTreeSet;
@@ -587,6 +562,8 @@ mod tests {
             fn get_native_currency_id(&self) -> CurrencyId;
             fn get_account_id(&self) -> &AccountId;
             fn is_this_vault(&self, vault_id: &VaultId) -> bool;
+            async fn get_foreign_assets_metadata(&self) -> Result<Vec<(u32, AssetMetadata)>, RuntimeError>;
+            async fn get_foreign_asset_metadata(&self, id: u32) -> Result<AssetMetadata, RuntimeError>;
         }
         #[async_trait]
         pub trait VaultRegistryPallet {
@@ -598,11 +575,12 @@ mod tests {
             async fn withdraw_collateral(&self, vault_id: &VaultId, amount: u128) -> Result<(), RuntimeError>;
             async fn get_public_key(&self) -> Result<Option<BtcPublicKey>, RuntimeError>;
             async fn register_public_key(&self, public_key: BtcPublicKey) -> Result<(), RuntimeError>;
-            async fn register_address(&self, vault_id: &VaultId, btc_address: BtcAddress) -> Result<(), RuntimeError>;
             async fn get_required_collateral_for_wrapped(&self, amount_btc: u128, collateral_currency: CurrencyId) -> Result<u128, RuntimeError>;
             async fn get_required_collateral_for_vault(&self, vault_id: VaultId) -> Result<u128, RuntimeError>;
             async fn get_vault_total_collateral(&self, vault_id: VaultId) -> Result<u128, RuntimeError>;
             async fn get_collateralization_from_vault(&self, vault_id: VaultId, only_issued: bool) -> Result<u128, RuntimeError>;
+            async fn set_current_client_release(&self, uri: &[u8], code_hash: &H256) -> Result<(), RuntimeError>;
+            async fn set_pending_client_release(&self, uri: &[u8], code_hash: &H256) -> Result<(), RuntimeError>;
         }
 
         #[async_trait]
@@ -647,6 +625,9 @@ mod tests {
             async fn get_parachain_confirmations(&self) -> Result<BlockNumber, RuntimeError>;
             async fn wait_for_block_in_relay(&self, block_hash: H256Le, btc_confirmations: Option<BlockNumber>) -> Result<(), RuntimeError>;
             async fn verify_block_header_inclusion(&self, block_hash: H256Le) -> Result<(), RuntimeError>;
+            async fn initialize_btc_relay(&self, header: RawBlockHeader, height: BitcoinBlockHeight) -> Result<(), RuntimeError>;
+            async fn store_block_header(&self, header: RawBlockHeader) -> Result<(), RuntimeError>;
+            async fn store_block_headers(&self, headers: Vec<RawBlockHeader>) -> Result<(), RuntimeError>;
         }
 
         #[async_trait]
@@ -689,6 +670,7 @@ mod tests {
             async fn get_transaction(&self, txid: &Txid, block_hash: Option<BlockHash>) -> Result<Transaction, BitcoinError>;
             async fn get_proof(&self, txid: Txid, block_hash: &BlockHash) -> Result<Vec<u8>, BitcoinError>;
             async fn get_block_hash(&self, height: u32) -> Result<BlockHash, BitcoinError>;
+            async fn get_pruned_height(&self) -> Result<u64, BitcoinError>;
             async fn is_block_known(&self, block_hash: BlockHash) -> Result<bool, BitcoinError>;
             async fn get_new_address<A: PartialAddress + Send + 'static>(&self) -> Result<A, BitcoinError>;
             async fn get_new_public_key<P: From<[u8; PUBLIC_KEY_SIZE]> + 'static>(&self) -> Result<P, BitcoinError>;
@@ -709,6 +691,7 @@ mod tests {
             async fn wallet_has_public_key<P>(&self, public_key: P) -> Result<bool, BitcoinError> where P: Into<[u8; PUBLIC_KEY_SIZE]> + From<[u8; PUBLIC_KEY_SIZE]> + Clone + PartialEq + Send + Sync + 'static;
             async fn import_private_key(&self, privkey: PrivateKey) -> Result<(), BitcoinError>;
             async fn rescan_blockchain(&self, start_height: usize, end_height: usize) -> Result<(), BitcoinError>;
+            async fn rescan_electrs_for_addresses<A: PartialAddress + Send + Sync + 'static>(&self, addresses: Vec<A>) -> Result<(), BitcoinError>;
             async fn find_duplicate_payments(&self, transaction: &Transaction) -> Result<Vec<(Txid, BlockHash)>, BitcoinError>;
             fn get_utxo_count(&self) -> Result<usize, BitcoinError>;
         }

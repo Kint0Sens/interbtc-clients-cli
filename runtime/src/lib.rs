@@ -12,7 +12,7 @@ pub mod types;
 #[cfg(test)]
 mod tests;
 
-#[cfg(all(feature = "testing-utils", feature = "standalone-metadata"))]
+#[cfg(feature = "testing-utils")]
 pub mod integration;
 
 use codec::{Decode, Encode};
@@ -26,19 +26,11 @@ pub use error::{Error, SubxtError};
 pub use primitives::CurrencyInfo;
 pub use prometheus;
 pub use retry::{notify_retry, RetryPolicy};
-#[cfg(all(
-    feature = "testing-utils",
-    any(
-        feature = "standalone-metadata",
-        feature = "parachain-metadata-interlay-testnet",
-        feature = "parachain-metadata-kintsugi-testnet"
-    )
-))]
+#[cfg(feature = "testing-utils")]
 pub use rpc::SudoPallet;
 pub use rpc::{
     BtcRelayPallet, CollateralBalancesPallet, FeePallet, InterBtcParachain, IssuePallet, OraclePallet, RedeemPallet,
-    RefundPallet, RelayPallet, ReplacePallet, SecurityPallet, TimestampPallet, UtilFuncs, VaultRegistryPallet,
-    SS58_PREFIX,
+    RefundPallet, ReplacePallet, SecurityPallet, TimestampPallet, UtilFuncs, VaultRegistryPallet, SS58_PREFIX,
 };
 pub use sp_arithmetic::{traits as FixedPointTraits, FixedI128, FixedPointNumber, FixedU128};
 use std::time::Duration;
@@ -54,7 +46,6 @@ pub const BLOCK_INTERVAL: Duration = Duration::from_millis(MILLISECS_PER_BLOCK);
 
 pub const BTC_RELAY_MODULE: &str = "BTCRelay";
 pub const ISSUE_MODULE: &str = "Issue";
-pub const RELAY_MODULE: &str = "Relay";
 pub const SECURITY_MODULE: &str = "Security";
 pub const SYSTEM_MODULE: &str = "System";
 
@@ -87,13 +78,6 @@ pub const STABLE_PARACHAIN_CONFIRMATIONS: &str = "StableParachainConfirmations";
     feature = "parachain-metadata-kintsugi-testnet",
     subxt(
         runtime_metadata_path = "metadata-parachain-kintsugi-testnet.scale",
-        generated_type_derives = "Eq, PartialEq, Ord, PartialOrd, Clone"
-    )
-)]
-#[cfg_attr(
-    feature = "standalone-metadata",
-    subxt(
-        runtime_metadata_path = "metadata-standalone.scale",
         generated_type_derives = "Eq, PartialEq, Ord, PartialOrd, Clone"
     )
 )]

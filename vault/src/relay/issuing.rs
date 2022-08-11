@@ -1,10 +1,11 @@
-use std::{convert::TryInto, fmt::Debug};
+use std::convert::TryInto;
 
 use super::Error;
-use crate::vaults::RandomDelay;
+use crate::delay::RandomDelay;
 use async_trait::async_trait;
 use bitcoin::{sha256, Hash};
-use runtime::{BtcRelayPallet, H256Le, InterBtcParachain, RawBlockHeader, RelayPallet};
+use runtime::{BtcRelayPallet, H256Le, InterBtcParachain, RawBlockHeader};
+use std::sync::Arc;
 
 #[async_trait]
 pub trait Issuing {
@@ -24,10 +25,10 @@ pub trait Issuing {
     /// # Arguments
     ///
     /// * `header` - Raw block header
-    async fn submit_block_header<RD: RandomDelay + Debug + Send + Sync>(
+    async fn submit_block_header(
         &self,
         header: Vec<u8>,
-        random_delay: RD,
+        random_delay: Arc<Box<dyn RandomDelay + Send + Sync>>,
     ) -> Result<(), Error>;
 
     /// Submit a batch of block headers and wait for inclusion
@@ -70,22 +71,22 @@ impl Issuing for InterBtcParachain {
     }
 
     async fn initialize(&self, header: Vec<u8>, height: u32) -> Result<(), Error> {
-        RelayPallet::initialize_btc_relay(self, encode_raw_header(header)?, height)
+        BtcRelayPallet::initialize_btc_relay(self, encode_raw_header(header)?, height)
             .await
             .map_err(Into::into)
     }
 
     #[tracing::instrument(name = "submit_block_header", skip(self, header))]
-    async fn submit_block_header<RD: RandomDelay + Debug + Send + Sync>(
+    async fn submit_block_header(
         &self,
         header: Vec<u8>,
-        random_delay: RD,
+        random_delay: Arc<Box<dyn RandomDelay + Send + Sync>>,
     ) -> Result<(), Error> {
         let raw_block_header = encode_raw_header(header.clone())?;
 
         // wait a random amount of blocks, to avoid all vaults flooding the parachain with
         // this transaction
-        random_delay
+        (*random_delay)
             .delay(&sha256::Hash::hash(header.as_slice()).into_inner())
             .await?;
         if self
@@ -94,14 +95,14 @@ impl Issuing for InterBtcParachain {
         {
             return Ok(());
         }
-        RelayPallet::store_block_header(self, raw_block_header)
+        BtcRelayPallet::store_block_header(self, raw_block_header)
             .await
             .map_err(Into::into)
     }
 
     #[tracing::instrument(name = "submit_block_header_batch", skip(self, headers))]
     async fn submit_block_header_batch(&self, headers: Vec<Vec<u8>>) -> Result<(), Error> {
-        RelayPallet::store_block_headers(
+        BtcRelayPallet::store_block_headers(
             self,
             headers
                 .iter()

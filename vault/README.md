@@ -23,7 +23,6 @@
 
 - Receive block headers from [Bitcoin Core](https://github.com/bitcoin/bitcoin)
 - Submit block headers to the [BTC Parachain](https://github.com/interlay/interbtc)
-- Monitor the BTC addresses of vaults to report BTC thefts
 
 ## Prerequisites
 
@@ -37,7 +36,7 @@ Build and run the [interBTC Parachain](https://github.com/interlay/interbtc):
 
 ```
 git clone git@gitlab.com:interlay/interbtc.git
-cargo run --bin interbtc-standalone -- --dev --tmp
+cargo run --bin parachain-metadata-kintsugi -- --dev --tmp
 ```
 
 ## Getting Started
@@ -46,7 +45,7 @@ The basic command to run the vault client:
 
 ```
 source ../.env
-cargo run --bin vault --features standalone-metadata
+cargo run --bin vault --features parachain-metadata-kintsugi
 ```
 
 ### Options
@@ -54,7 +53,7 @@ cargo run --bin vault --features standalone-metadata
 When using cargo to run this binary, arguments to cargo and the binary are separated by `--`. For example, to pass `--help` to the vault to get a list of all command line options that is guaranteed to be up date, run:
 
 ```
-cargo run --bin vault --features standalone-metadata -- --help
+cargo run --bin vault --features parachain-metadata-kintsugi -- --help
 ```
 
 For convenience, a copy of this output is included below. Note that the bitcoin RPC configuration can be passed either as command line arguments, or as environment variables. By running `source ../.env`, the default RPC configuration is loaded into environment variables. 
@@ -70,7 +69,6 @@ FLAGS:
         --no-auto-replace           Opt out of participation in replace requests
         --no-bitcoin-block-relay    Don't relay bitcoin block headers
         --no-issue-execution        Don't try to execute issues
-        --no-vault-theft-report     Don't monitor vault thefts
     -V, --version                   Print version information
 
 OPTIONS:
@@ -104,10 +102,6 @@ OPTIONS:
         --bitcoin-rpc-user <BITCOIN_RPC_USER>
             [env: BITCOIN_RPC_USER=]
 
-        --bitcoin-theft-start-height <BITCOIN_THEFT_START_HEIGHT>
-            Starting height for vault theft checks, if not defined automatically start from the
-            chain tip
-
         --btc-confirmations <BTC_CONFIRMATIONS>
             How many bitcoin confirmations to wait for. If not specified, the parachain settings
             will be used (recommended)
@@ -126,7 +120,7 @@ OPTIONS:
             Timeout in milliseconds to repeat collateralization checks [default: 5000]
 
         --electrs-url <ELECTRS_URL>
-            Url of the electrs server - used for theft reporting. If unset, a default fallback is
+            Url of the electrs server. If unset, a default fallback is
             used depending on the network argument
 
         --keyfile <KEYFILE>

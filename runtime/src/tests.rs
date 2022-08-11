@@ -1,14 +1,15 @@
-#![cfg(all(test, feature = "standalone-metadata"))]
+#![cfg(test)]
 
-const DEFAULT_TESTING_CURRENCY: CurrencyId = Token(DOT);
+const DEFAULT_TESTING_CURRENCY: CurrencyId = Token(KSM);
 
 use super::{
     BtcAddress, BtcPublicKey, BtcRelayPallet, CollateralBalancesPallet, CurrencyId, FixedPointNumber, FixedU128,
-    OraclePallet, RawBlockHeader, RelayPallet, ReplacePallet, SecurityPallet, StatusCode, Token, VaultRegistryPallet,
-    DOT, IBTC,
+    OraclePallet, RawBlockHeader, ReplacePallet, SecurityPallet, StatusCode, Token, VaultRegistryPallet, KBTC, KINT,
+    KSM,
 };
 use crate::{integration::*, FeedValuesEvent, OracleKey, VaultId, H160, U256};
 use module_bitcoin::{formatter::TryFormattable, types::BlockBuilder};
+pub use primitives::CurrencyId::ForeignAsset;
 use sp_keyring::AccountKeyring;
 use std::{convert::TryInto, time::Duration};
 
@@ -44,7 +45,7 @@ async fn test_getters() {
 
     tokio::join!(
         async {
-            assert_eq!(parachain_rpc.get_free_balance(Token(DOT)).await.unwrap(), 1 << 60);
+            assert_eq!(parachain_rpc.get_free_balance(Token(KSM)).await.unwrap(), 1 << 60);
         },
         async {
             assert_eq!(parachain_rpc.get_parachain_status().await.unwrap(), StatusCode::Error);
@@ -56,28 +57,6 @@ async fn test_getters() {
             assert!(parachain_rpc.get_current_active_block_number().await.unwrap() == 0);
         }
     );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_is_transaction_invalid() {
-    let (client, _tmp_dir) = default_provider_client(AccountKeyring::Alice).await;
-    let parachain_rpc = setup_provider(client.clone(), AccountKeyring::Alice).await;
-    let vault_id = VaultId::new(AccountKeyring::Alice.into(), Token(DOT), Token(IBTC));
-    let err = parachain_rpc.is_transaction_invalid(&vault_id, &[]).await;
-
-    parachain_rpc
-        .get_vaults_by_account_id(&AccountKeyring::Alice.into())
-        .await
-        .unwrap();
-    let key = OracleKey::ExchangeRate(DEFAULT_TESTING_CURRENCY);
-    let exchange_rate = FixedU128::saturating_from_rational(1u128, 100u128);
-    parachain_rpc
-        .feed_values(vec![(key.clone(), exchange_rate)])
-        .await
-        .unwrap();
-    parachain_rpc.feed_values(vec![(key, exchange_rate)]).await.unwrap();
-    parachain_rpc.wrapped_to_collateral(2532523, Token(DOT)).await.unwrap();
-    err.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -131,7 +110,7 @@ async fn test_register_vault() {
     let parachain_rpc = setup_provider(client.clone(), AccountKeyring::Alice).await;
     set_exchange_rate(client.clone()).await;
 
-    let vault_id = VaultId::new(AccountKeyring::Alice.into(), Token(DOT), Token(IBTC));
+    let vault_id = VaultId::new(AccountKeyring::Alice.into(), Token(KSM), Token(KBTC));
 
     parachain_rpc.register_public_key(dummy_public_key()).await.unwrap();
     parachain_rpc.register_vault(&vault_id, 100).await.unwrap();
@@ -183,4 +162,21 @@ async fn test_btc_relay() {
         assert_eq!(parachain_rpc.get_best_block().await.unwrap(), block_hash.into());
         assert_eq!(parachain_rpc.get_best_block_height().await.unwrap(), height);
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_currency_id_parsing() {
+    let (client, _tmp_dir) = default_provider_client(AccountKeyring::Alice).await;
+    let parachain_rpc = setup_provider(client.clone(), AccountKeyring::Alice).await;
+    parachain_rpc.register_dummy_assets().await.unwrap();
+
+    // test with different capitalization to make sure the check is not case sensitive
+    assert_eq!(
+        parachain_rpc.parse_currency_id("KiNt".to_string()).await.unwrap(),
+        Token(KINT)
+    );
+    assert_eq!(
+        parachain_rpc.parse_currency_id("TeSt".to_string()).await.unwrap(),
+        ForeignAsset(2)
+    );
 }

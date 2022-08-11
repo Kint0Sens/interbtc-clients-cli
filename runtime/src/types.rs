@@ -5,7 +5,7 @@ use subxt::sp_core::{crypto::Ss58Codec, sr25519::Pair as KeyPair};
 pub use primitives::{
     CurrencyId,
     CurrencyId::{ForeignAsset, Token},
-    TokenSymbol::{DOT, IBTC, INTR, KBTC, KINT, KSM},
+    TokenSymbol::{self, DOT, IBTC, INTR, KBTC, KINT, KSM},
 };
 
 pub use currency_id::CurrencyIdExt;
@@ -39,8 +39,7 @@ mod metadata_aliases {
         vault_registry::types::VaultStatus,
     };
     pub type InterBtcVault =
-        metadata::runtime_types::vault_registry::types::Vault<AccountId, BlockNumber, Balance, CurrencyId>;
-    pub use metadata::runtime_types::vault_registry::types::Wallet;
+        metadata::runtime_types::vault_registry::types::Vault<AccountId, BlockNumber, Balance, CurrencyId, FixedU128>;
     pub type InterBtcRichBlockHeader = metadata::runtime_types::btc_relay::types::RichBlockHeader<BlockNumber>;
     pub type BitcoinBlockHeight = u32;
 
@@ -69,14 +68,18 @@ mod metadata_aliases {
 
     pub use metadata::btc_relay::events::StoreMainChainHeader as StoreMainChainHeaderEvent;
 
-    pub use metadata::relay::events::{VaultDoublePayment as VaultDoublePaymentEvent, VaultTheft as VaultTheftEvent};
-
     pub use metadata::tokens::events::Endowed as EndowedEvent;
+
+    pub use metadata::runtime_types::{
+        interbtc_primitives::CustomMetadata as InterBtcAdditionalMetadata,
+        orml_traits::asset_registry::AssetMetadata as GenericAssetMetadata,
+    };
+    pub type AssetMetadata = GenericAssetMetadata<Balance, InterBtcAdditionalMetadata>;
 
     pub use metadata::runtime_types::{
         btc_relay::pallet::Error as BtcRelayPalletError, frame_system::pallet::Error as SystemPalletError,
         issue::pallet::Error as IssuePalletError, redeem::pallet::Error as RedeemPalletError,
-        relay::pallet::Error as RelayPalletError, security::pallet::Error as SecurityPalletError,
+        security::pallet::Error as SecurityPalletError,
     };
 
     pub use metadata::runtime_types::bitcoin::types::H256Le;
@@ -114,8 +117,6 @@ mod metadata_aliases {
     pub type EncodedCall = metadata::runtime_types::testnet_interlay_runtime_parachain::Call;
     #[cfg(feature = "parachain-metadata-kintsugi-testnet")]
     pub type EncodedCall = metadata::runtime_types::testnet_kintsugi_runtime_parachain::Call;
-    #[cfg(feature = "standalone-metadata")]
-    pub type EncodedCall = metadata::runtime_types::interbtc_runtime_standalone::Call;
 
     pub use metadata::runtime_types::security::pallet::Call as SecurityCall;
 }

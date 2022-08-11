@@ -1,11 +1,11 @@
 use crate::{
     collateral::lock_required_collateral,
+    delay::{OrderedVaultsDelay, RandomDelay, ZeroDelay},
     error::Error,
     faucet, issue,
     metrics::{poll_metrics, publish_tokio_metrics, PerCurrencyMetrics},
     relay::run_relayer,
     service::*,
-    vaults::{OrderedVaultsDelay, RandomDelay, Vaults},
     Event, IssueRequests, CHAIN_HEIGHT_POLLING_INTERVAL,
 };
 use async_trait::async_trait;
@@ -19,9 +19,9 @@ use futures::{
 use git_version::git_version;
 use runtime::{
     cli::{parse_duration_minutes, parse_duration_ms},
-    parse_collateral_currency, BtcRelayPallet, CollateralBalancesPallet, CurrencyId, Error as RuntimeError,
-    InterBtcParachain, PrettyPrint, RegisterVaultEvent, StoreMainChainHeaderEvent, UpdateActiveBlockEvent, UtilFuncs,
-    VaultCurrencyPair, VaultId, VaultRegistryPallet,
+    BtcRelayPallet, CollateralBalancesPallet, CurrencyId, Error as RuntimeError, InterBtcParachain, PrettyPrint,
+    RegisterVaultEvent, StoreMainChainHeaderEvent, UpdateActiveBlockEvent, UtilFuncs, VaultCurrencyPair, VaultId,
+    VaultRegistryPallet,
 };
 use service::{wait_or_shutdown, Error as ServiceError, MonitoringConfig, Service, ShutdownSender};
 use std::{collections::HashMap, pin::Pin, sync::Arc, time::Duration};
@@ -36,14 +36,14 @@ const RESTART_INTERVAL: Duration = Duration::from_secs(10800); // restart every 
 
 fn parse_collateral_and_amount(
     s: &str,
-) -> Result<(CurrencyId, Option<u128>), Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> Result<(String, Option<u128>), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let pos = s
         .find('=')
         .ok_or_else(|| format!("invalid CurrencyId=amount: no `=` found in `{}`", s))?;
 
     let val = &s[pos + 1..];
     Ok((
-        parse_collateral_currency(&s[..pos])?,
+        s[..pos].to_string(),
         if val.contains("faucet") {
             None
         } else {
@@ -56,7 +56,7 @@ fn parse_collateral_and_amount(
 pub struct VaultServiceConfig {
     /// Automatically register the vault with the given amount of collateral and a newly generated address.
     #[clap(long, parse(try_from_str = parse_collateral_and_amount))]
-    pub auto_register: Vec<(CurrencyId, Option<u128>)>,
+    pub auto_register: Vec<(String, Option<u128>)>,
 
     /// Pass the faucet URL for auto-registration.
     #[clap(long)]
@@ -74,6 +74,10 @@ pub struct VaultServiceConfig {
     #[clap(long)]
     pub no_api: bool,
 
+    /// Attempt to execute best-effort transactions immediately, rather than using a random delay.
+    #[clap(long)]
+    pub no_random_delay: bool,
+
     /// Timeout in milliseconds to repeat collateralization checks.
     #[clap(long, parse(try_from_str = parse_duration_ms), default_value = "5000")]
     pub collateral_timeout_ms: Duration,
@@ -86,11 +90,6 @@ pub struct VaultServiceConfig {
     /// Minimum time to the the redeem/replace execution deadline to make the bitcoin payment.
     #[clap(long, parse(try_from_str = parse_duration_minutes), default_value = "120")]
     pub payment_margin_minutes: Duration,
-
-    /// Starting height for vault theft checks, if not defined
-    /// automatically start from the chain tip.
-    #[clap(long)]
-    pub bitcoin_theft_start_height: Option<u32>,
 
     /// Timeout in milliseconds to poll Bitcoin.
     #[clap(long, parse(try_from_str = parse_duration_ms), default_value = "6000")]
@@ -112,10 +111,6 @@ pub struct VaultServiceConfig {
     /// Don't relay bitcoin block headers.
     #[clap(long)]
     pub no_bitcoin_block_relay: bool,
-
-    /// Don't monitor vault thefts.
-    #[clap(long)]
-    pub no_vault_theft_report: bool,
 
     /// Don't refund overpayments.
     #[clap(long)]
@@ -275,12 +270,6 @@ impl<BCA: BitcoinCoreApi + Clone + Send + Sync + 'static> VaultIdManager<BCA> {
                 Err(Error::RuntimeError(RuntimeError::VaultLiquidated)) => {
                     tracing::error!(
                         "[{}] Vault is liquidated -- not going to process events for this vault.",
-                        vault_id.pretty_print()
-                    );
-                }
-                Err(Error::RuntimeError(RuntimeError::VaultCommittedTheft)) => {
-                    tracing::error!(
-                        "[{}] Vault committed theft -- not going to process events for this vault.",
                         vault_id.pretty_print()
                     );
                 }
@@ -503,8 +492,15 @@ impl VaultService {
 
         let account_id = self.btc_parachain.get_account_id().clone();
 
+        let parsed_auto_register = join_all(self.config.auto_register.iter().map(|(symbol, amount)| async move {
+            Ok((self.btc_parachain.parse_currency_id(symbol.to_string()).await?, amount))
+        }))
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, Error>>()?;
+
         // exit if auto-register uses faucet and faucet url not set
-        if self.config.auto_register.iter().any(|(_, o)| o.is_none()) && self.config.faucet_url.is_none() {
+        if parsed_auto_register.iter().any(|(_, o)| o.is_none()) && self.config.faucet_url.is_none() {
             // TODO: validate before bitcoin / parachain connections
             return Err(Error::FaucetUrlNotSet);
         }
@@ -529,8 +525,7 @@ impl VaultService {
 
         self.maybe_register_public_key().await?;
         join_all(
-            self.config
-                .auto_register
+            parsed_auto_register
                 .iter()
                 .map(|(currency_id, amount)| self.maybe_register_vault(currency_id, amount)),
         )
@@ -567,12 +562,16 @@ impl VaultService {
         let oldest_issue_btc_height =
             issue::initialize_issue_set(&self.btc_rpc_master_wallet, &self.btc_parachain, &issue_set).await?;
 
-        let random_delay = OrderedVaultsDelay::new(self.btc_parachain.clone()).await?;
+        let random_delay: Arc<Box<dyn RandomDelay + Send + Sync>> = if self.config.no_random_delay {
+            Arc::new(Box::new(ZeroDelay))
+        } else {
+            Arc::new(Box::new(OrderedVaultsDelay::new(self.btc_parachain.clone()).await?))
+        };
 
         let (issue_event_tx, issue_event_rx) = mpsc::channel::<Event>(32);
         let (replace_event_tx, replace_event_rx) = mpsc::channel::<Event>(16);
 
-        let mut tasks = vec![
+        let tasks = vec![
             (
                 "Issue Request Listener",
                 run(listen_for_issue_requests(
@@ -707,7 +706,7 @@ impl VaultService {
                         issue_set.clone(),
                         oldest_issue_btc_height,
                         num_confirmations,
-                        random_delay.clone(),
+                        random_delay,
                     ),
                 ),
             ),
@@ -734,10 +733,6 @@ impl VaultService {
                 }),
             ),
         ];
-
-        if !self.config.no_vault_theft_report {
-            tasks.extend(self.btc_monitor_tasks(random_delay.clone()).await?)
-        }
 
         run_and_monitor_tasks(self.shutdown.clone(), tasks).await;
 
@@ -767,9 +762,7 @@ impl VaultService {
         let vault_id = self.get_vault_id(*collateral_currency);
 
         match is_vault_registered(&self.btc_parachain, &vault_id).await {
-            Err(Error::RuntimeError(RuntimeError::VaultLiquidated))
-            | Err(Error::RuntimeError(RuntimeError::VaultCommittedTheft))
-            | Ok(true) => {
+            Err(Error::RuntimeError(RuntimeError::VaultLiquidated)) | Ok(true) => {
                 tracing::info!(
                     "[{}] Not registering vault -- already registered",
                     vault_id.pretty_print()
@@ -819,63 +812,6 @@ impl VaultService {
         }
         tracing::info!("Got new block...");
         Ok(startup_height)
-    }
-
-    async fn btc_monitor_tasks<RD: RandomDelay + Send + Sync + 'static>(
-        &self,
-        random_delay: RD,
-    ) -> Result<Vec<(&str, ServiceTask)>, Error> {
-        tracing::info!("Fetching all active vaults...");
-        let vaults = self
-            .btc_parachain
-            .get_all_vaults()
-            .await?
-            .into_iter()
-            .flat_map(|vault| {
-                vault
-                    .wallet
-                    .addresses
-                    .iter()
-                    .map(|addr| (*addr, vault.id.clone()))
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-
-        // store vaults in Arc<RwLock>
-        let vaults = Arc::new(Vaults::from(vaults));
-
-        // scan from custom height or the current tip
-        let bitcoin_theft_start_height = self
-            .config
-            .bitcoin_theft_start_height
-            .unwrap_or(self.btc_rpc_master_wallet.get_block_count().await? as u32 + 1);
-
-        Ok(vec![
-            (
-                "Bitcoin tx monitor",
-                run(monitor_btc_txs(
-                    self.btc_rpc_master_wallet.clone(),
-                    self.btc_parachain.clone(),
-                    random_delay,
-                    bitcoin_theft_start_height,
-                    vaults.clone(),
-                )),
-            ),
-            (
-                // keep track of all registered vaults (i.e. keep the `vaults` map up-to-date)
-                "Vault Registration Listener",
-                run(listen_for_vaults_registered(self.btc_parachain.clone(), vaults.clone())),
-            ),
-            (
-                // keep vault wallets up-to-date
-                "Vault Wallet Update Listener",
-                run(listen_for_wallet_updates(
-                    self.btc_parachain.clone(),
-                    self.btc_rpc_master_wallet.network(),
-                    vaults.clone(),
-                )),
-            ),
-        ])
     }
 }
 
