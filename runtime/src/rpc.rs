@@ -6,6 +6,17 @@ use crate::{
     types::*,
     AccountId, CurrencyId, Error, InterBtcRuntime, InterBtcSigner, RetryPolicy, RichH256Le, SubxtError,
 };
+
+//CLI start
+use crate::metadata::runtime_types::xcm::{
+    v1::junction::Junction,
+    v0::junction::NetworkId,
+    v1::multilocation::Junctions::X1,
+    v1::multilocation::MultiLocation as V1MultiLocation,
+    VersionedMultiLocation as VersionedMultiLocation,
+};
+//CLI end
+
 #[cfg(any(
     feature = "standalone-metadata",
     feature = "parachain-metadata-interlay-testnet",
@@ -1232,6 +1243,11 @@ pub trait RedeemPallet {
     ) -> Result<Vec<(H256, InterBtcRedeemRequest)>, Error>;
 
     async fn get_redeem_period(&self) -> Result<BlockNumber, Error>;
+//CLI begin
+async fn liquidation_redeem(&self, collateral: CurrencyId, wrapped: CurrencyId, amount: u128, ) -> Result<(), Error>;
+
+async fn get_redeem_dust_amount(&self) -> Result<u128, Error>;
+//CLI end
 }
 
 #[async_trait]
@@ -1312,6 +1328,34 @@ impl RedeemPallet for InterBtcParachain {
         let head = self.get_latest_block_hash().await?;
         Ok(self.api.storage().redeem().redeem_period(head).await?)
     }
+//CLI begin
+async fn liquidation_redeem(&self, collateral: CurrencyId, wrapped: CurrencyId, amount: u128, ) -> Result<(), Error> {
+    let currencies = &VaultCurrencyPair {
+        collateral,
+        wrapped
+    };
+    
+    let _burn_event = self
+    .with_unique_signer(|signer| async move {
+        self.api
+            .tx()
+            .redeem()
+            .liquidation_redeem(currencies.clone(), amount)
+            .sign_and_submit_then_watch_default(&signer)
+            .await
+    })
+    .await?
+    .find_first::<LiquidationRedeemEvent>()?
+    .ok_or(Error::RequestRedeemIDNotFound)?;
+ 
+    Ok(())
+ }
+ 
+ async fn get_redeem_dust_amount(&self) -> Result<u128, Error> {
+    let head = self.get_latest_block_hash().await?;
+    Ok(self.api.storage().redeem().redeem_btc_dust_value(head).await?)
+}
+//CLI end
 }
 
 #[async_trait]
@@ -1521,6 +1565,15 @@ pub trait VaultRegistryPallet {
     async fn get_vault_total_collateral(&self, vault_id: VaultId) -> Result<u128, Error>;
 
     async fn get_collateralization_from_vault(&self, vault_id: VaultId, only_issued: bool) -> Result<u128, Error>;
+//CLI begin
+    async fn get_all_vaults_really_all(&self) -> Result<Vec<InterBtcVault>, Error>;
+
+    async fn get_premium_redeem_vaults(&self) -> Result<Vec<(VaultId, BalanceWrapper<Balance>)>, Error>;
+
+    async fn get_issuable_tokens_from_vault(&self, vault_id: VaultId) -> Result<u128, Error>;
+
+    async fn get_liquidation_vault(&self, collateral: CurrencyId, wrapped: CurrencyId) -> Result<InterBtcSystemVault, Error>;
+//CLI end
 }
 
 #[async_trait]
@@ -1717,7 +1770,106 @@ impl VaultRegistryPallet for InterBtcParachain {
 
         Ok(result.into_inner())
     }
+
+//CLI begin
+  /// Fetch all active vaults.
+  async fn get_all_vaults_really_all(&self) -> Result<Vec<InterBtcVault>, Error> {
+    let mut vaults = Vec::new();
+    let head = self.get_latest_block_hash().await?;
+    let mut iter = self.api.storage().vault_registry().vaults_iter(head).await?;
+    while let Some((_, account)) = iter.next().await? {
+        // if let VaultStatus::Active(..) = account.status {
+            vaults.push(account);
+        // }
+    }
+    Ok(vaults)
 }
+
+async fn get_premium_redeem_vaults(&self) -> Result<Vec<(VaultId, BalanceWrapper<Balance>)>, Error> {
+    let head = self.get_latest_block_hash().await?;
+    let result : Vec<(VaultId, BalanceWrapper<Balance>)> = self
+    .rpc()
+    .request(
+    "vaultRegistry_getPremiumRedeemVaults", 
+    rpc_params![head])
+    .await?;
+
+    Ok(result)
+}
+
+async fn get_issuable_tokens_from_vault(&self, vault_id: VaultId) -> Result<u128, Error> {
+    let head = self.get_latest_block_hash().await?;
+    let result: BalanceWrapper<_> = self
+        .rpc()
+        .request(
+            "vaultRegistry_getIssueableTokensFromVault", 
+            // "vaultRegistry_getIssuableTokensFromVault", 
+            rpc_params![vault_id, head])
+        .await?;
+
+    Ok(result.amount)
+}
+
+async fn get_liquidation_vault(&self, collateral: CurrencyId, wrapped: CurrencyId) -> Result<InterBtcSystemVault, Error> {
+
+    let head = self.get_latest_block_hash().await?;
+    let currencies = VaultCurrencyPair {
+                collateral,
+                wrapped
+    };
+
+    // let system_vault = self.api.storage().vault_registry().liquidation_vault(&vault_id.currencies, head).await?;
+    let system_vault = self.api.storage().vault_registry().liquidation_vault(&currencies, head).await?;
+    system_vault.ok_or(Error::StorageItemNotFound)
+}
+
+//CLI end
+}
+
+// CLI start
+#[async_trait]
+pub trait XToken {
+    async fn transfer(&self,  amount: u128, dest_account: AccountId) ->  Result<(), Error>;
+}
+#[async_trait]
+impl  XToken for InterBtcParachain {
+    async fn transfer(&self,  amount: u128, dest_account: AccountId) ->  Result<(), Error> {
+        // let junction_account_id =  Junction::AccountId32 {
+        //                 network: NetworkId::Any,
+        //                 id: dest_account.into(),
+        //                };
+        // let junctions_x1 = X1( junction_account_id );
+
+        // let multilocation : V1MultiLocation = V1MultiLocation {
+        //     parents: 1,
+        //     interior: junctions_x1,
+        // };
+        // let _dest : VersionedMultiLocation = VersionedMultiLocation::V1( multilocation );
+        let dest : &VersionedMultiLocation = &VersionedMultiLocation::V1(
+                V1MultiLocation {
+                    parents: 1,
+                    interior: X1(
+                        Junction::AccountId32 {
+                            network: NetworkId::Any,
+                            id: dest_account.into(),
+                        }
+                    ),
+                }
+            );
+         self.with_unique_signer(|signer| async move {
+            self.api
+                .tx()
+                .x_tokens()
+                .transfer(self.relay_chain_currency_id,  amount, dest.clone(), 4000000000)
+                .sign_and_submit_then_watch_default(&signer)
+                .await
+            })
+            .await?;
+            Ok(())
+    }
+}
+//CLI end
+
 
 #[async_trait]
 pub trait FeePallet {

@@ -347,7 +347,8 @@ impl BitcoinCoreBuilder {
 
 #[derive(Clone)]
 pub struct BitcoinCore {
-    rpc: Arc<Client>,
+//CLI made rpc public (TODO. Integrate commmon btc funcs to bitcoin crate?)    
+    pub rpc: Arc<Client>,
     wallet_name: Option<String>,
     network: Network,
     transaction_creation_lock: Arc<Mutex<()>>,
@@ -391,7 +392,10 @@ impl BitcoinCore {
     }
 
     /// Wrapper of rust_bitcoincore_rpc::create_raw_transaction_hex that accepts an optional op_return
-    fn create_raw_transaction_hex(
+//CLI start 
+    pub fn create_raw_transaction_hex(
+    // fn create_raw_transaction_hex(
+//CLI end
         &self,
         address: String,
         amount: Amount,

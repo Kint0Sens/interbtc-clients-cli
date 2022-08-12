@@ -10,38 +10,58 @@ use subxt::sp_core::{sr25519::Pair, Pair as _};
 
 #[derive(Parser, Debug, Clone)]
 pub struct ProviderUserOpts {
-    /// Keyring to use, mutually exclusive with keyfile.
-    #[clap(long, required_unless_present = "keyfile", parse(try_from_str = parse_account_keyring))]
-    pub keyring: Option<AccountKeyring>,
+//CLI start    
+    // /// Keyring to use, mutually exclusive with keyfile.
+    // #[clap(long, required_unless_present = "keyfile", parse(try_from_str = parse_account_keyring))]
+    // pub keyring: Option<AccountKeyring>,
 
     /// Path to the json file containing key pairs in a map.
     /// Valid content of this file is e.g.
     /// `{ "MyUser1": "<Polkadot Account Mnemonic>", "MyUser2": "<Polkadot Account Mnemonic>" }`.
-    #[clap(long, conflicts_with = "keyring", requires = "keyname")]
-    pub keyfile: Option<String>,
+    // #[clap(long, conflicts_with = "keyring", requires = "keyname")]
+    // pub keyfile: Option<String>,
 
+    // /// The name of the account from the keyfile to use.
+    // #[clap(long, conflicts_with = "keyring", requires = "keyfile")]
+    // pub keyname: Option<String>,
+
+    /// Path to the json file containing key pairs in a map.
+    /// Valid content of this file is e.g.
+    /// `{ "MyUser1": "<Polkadot Account Mnemonic>", "MyUser2": "<Polkadot Account Mnemonic>" }`.
+    #[clap(long, requires = "keyname", default_value = "./keyfile.json")]  // "~/keyfile.json" does not translate to /home/user/keyfile.json
+    pub keyfile: String,
     /// The name of the account from the keyfile to use.
-    #[clap(long, conflicts_with = "keyring", requires = "keyfile")]
-    pub keyname: Option<String>,
+    #[clap(long, requires = "keyfile", default_value = "keyname")]
+    pub keyname: String,
 }
 
 impl ProviderUserOpts {
-    /// Get the key pair and the username, the latter of which is used for wallet selection.
+    // /// Get the key pair and the username, the latter of which is used for wallet selection.
+    // pub fn get_key_pair(&self) -> Result<(Pair, String), Error> {
+    //     // load parachain credentials
+    //     let (pair, user_name) = match (self.keyfile.as_ref(), self.keyname.as_ref(), &self.keyring) {
+    //         (Some(file_path), Some(keyname), None) => {
+    //             (get_credentials_from_file(file_path, keyname)?, keyname.to_string())
+    //         }
+    //         (None, None, Some(keyring)) => (keyring.pair(), format!("{}", keyring)),
+    //         _ => {
+    //             // should never occur, due to clap constraints
+    //             return Err(Error::KeyringArgumentError);
+    //         }
+    //     };
+    //     Ok((pair, user_name))
+    // }
     pub fn get_key_pair(&self) -> Result<(Pair, String), Error> {
         // load parachain credentials
-        let (pair, user_name) = match (self.keyfile.as_ref(), self.keyname.as_ref(), &self.keyring) {
-            (Some(file_path), Some(keyname), None) => {
-                (get_credentials_from_file(file_path, keyname)?, keyname.to_string())
-            }
-            (None, None, Some(keyring)) => (keyring.pair(), format!("{}", keyring)),
-            _ => {
-                // should never occur, due to clap constraints
-                return Err(Error::KeyringArgumentError);
-            }
-        };
+        let keyname = self.keyname.clone();
+        // println!("{}",self.keyfile.clone());
+        let pair =
+         get_credentials_from_file(self.keyfile.as_ref(), self.keyname.as_ref())?;
+         let user_name = keyname;
         Ok((pair, user_name))
     }
 }
+//CLI end
 
 /// Loads the credentials for the given user from the keyfile
 ///
@@ -90,6 +110,7 @@ pub struct ConnectionOpts {
         feature = "parachain-metadata-interlay",
         clap(long, default_value = "wss://api.interlay.io:443/parachain")
     )]
+
     pub btc_parachain_url: String,
 
     /// Timeout in milliseconds to wait for connection to btc-parachain.

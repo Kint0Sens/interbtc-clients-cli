@@ -38,6 +38,10 @@ mod metadata_aliases {
         security::types::{ErrorCode, StatusCode},
         vault_registry::types::VaultStatus,
     };
+//CLI start
+    pub type InterBtcSystemVault =
+    metadata::runtime_types::vault_registry::types::SystemVault< Balance, CurrencyId>;
+//CLI end
     pub type InterBtcVault =
         metadata::runtime_types::vault_registry::types::Vault<AccountId, BlockNumber, Balance, CurrencyId, FixedU128>;
     pub type InterBtcRichBlockHeader = metadata::runtime_types::btc_relay::types::RichBlockHeader<BlockNumber>;
@@ -59,6 +63,9 @@ mod metadata_aliases {
 
     pub use metadata::redeem::events::{ExecuteRedeem as ExecuteRedeemEvent, RequestRedeem as RequestRedeemEvent};
 
+//CLI begin
+    pub type LiquidationRedeemEvent = metadata::redeem::events::LiquidationRedeem;
+//CLI end 
     pub use metadata::security::events::UpdateActiveBlock as UpdateActiveBlockEvent;
 
     pub use metadata::vault_registry::events::{
