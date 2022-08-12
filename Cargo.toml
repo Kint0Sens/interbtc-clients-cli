@@ -6,7 +6,13 @@ members = [
   "vault",
   "bitcoin",
   "faucet",
-  "service"
+  "service",
+  "cli/common",
+  "cli/explore",
+  "cli/burn",
+  "cli/issue",
+  "cli/redeem",
+  "cli/transfer"
 ]
 
 [patch.crates-io]
