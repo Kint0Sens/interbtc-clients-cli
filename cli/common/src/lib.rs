@@ -111,7 +111,7 @@ pub fn get_currency_str(token_symbol : TokenSymbol) -> String {
     match token_symbol {
         TokenSymbol::KINT => { "KINT".to_string() },
         TokenSymbol::DOT => { "DOT".to_string() },
-        TokenSymbol::IBTC => { "KINT".to_string() },
+        TokenSymbol::IBTC => { "IBTC".to_string() },
         TokenSymbol::INTR => { "INTR".to_string() },
         TokenSymbol::KBTC => { "KBTC".to_string() },
         TokenSymbol::KSM => { "KSM".to_string() },

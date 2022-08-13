@@ -13,6 +13,7 @@ use runtime::{
     CollateralBalancesPallet,
     VaultRegistryPallet,
     IssuePallet,
+    FeePallet,
     InterBtcSigner,
     Ss58Codec,
     PrettyPrint,        
@@ -21,8 +22,6 @@ use runtime::{
     VaultStatus,
     AccountId,
     CurrencyIdExt,
-    parse_wrapped_currency,
-    parse_collateral_currency,
 };
 
 use common::*;
@@ -40,9 +39,9 @@ struct Cli {
     #[clap(short, long, parse(from_occurrences))]
     verbose: usize,
 
-    /// Wait for the parachain to confirm that the kbtc has been issued 
+    /// Wait for the parachain to confirm that the wrapped btc has been issued 
     #[clap(short, long, parse(from_occurrences))]
-    wait_for_issued_kbtc: usize,
+    wait_for_issued_wrapped: usize,
 
     /// Confirmations needed for bitcoin balance checks and transfer check
     /// If omitted, defaults to 1. If set to 0 transfer completion will not be checked
@@ -102,15 +101,7 @@ pub struct ToolConfig {
     /// Sleep time wait for BTC trasfer completion
     #[clap(long, default_value = "120")]
     sleeptime_wait_for_btc_transfer: u64,
-
-
-    /// Collateral
-    #[clap(long, default_value = "KSM")]  // Make network dependent default
-    chain_collateral_id: String,
  
-    /// Wrapped
-    #[clap(long, default_value = "KBTC")] // Make network dependent default
-    chain_wrapped_id: String,
  }
 
 #[tokio::main]
@@ -133,8 +124,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (key_pair, _) = cli.account_info.get_key_pair()?;
     let signer = InterBtcSigner::new(key_pair);
     let signer_account_id = signer.account_id().clone();
-    let collateral_id  = parse_collateral_currency(&config.chain_collateral_id).unwrap();
-    let wrapped_id  = parse_wrapped_currency(&config.chain_wrapped_id).unwrap();
 
     let btc_conf : Option<u32> = if cli.btc_network_confirmations > 0 {Some(cli.btc_network_confirmations)} else { Some(1)};
 
@@ -144,9 +133,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (shutdown_tx, _) = tokio::sync::broadcast::channel(16);
     tracing::trace!("{}",TEXT_CONNECT_ATTEMPT);
     let parachain = parachain_config.try_connect(signer.clone(), shutdown_tx.clone()).await?;
+    let parachain_cur_id = parachain.relay_chain_currency_id;
+    let parachain_cur_str = get_currency_str(parachain_cur_id.inner().unwrap());
+    let wrapped_cur_id = parachain.wrapped_currency_id;
+    let wrapped_cur_str = get_currency_str(wrapped_cur_id.inner().unwrap());
+    let griefing_collateral = parachain.get_issue_griefing_collateral().await?;
     tracing::info!("{}",TEXT_CONNECTED);
     tracing::info!("{}",TEXT_SEPARATOR);
-
+    tracing::info!("Relay chain currency {}",parachain_cur_str);
+    tracing::info!("Wrapped currency {}",wrapped_cur_str);
+    tracing::info!("Griefing collateral {}",griefing_collateral);
     // Setup wallet
     tracing::trace!("{}",TEXT_BTC_CONNECT_ATTEMPT);
     let bitcoin_config = cli.bitcoin;
@@ -170,7 +166,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let some_forced_vault_id : Option<VaultId> =  match use_forced_vault {
         true => {
-            Some(VaultId::new(AccountId::from_str(&config.vault_account_id).unwrap(), collateral_id, wrapped_id ))
+            Some(VaultId::new(AccountId::from_str(&config.vault_account_id).unwrap(), parachain_cur_id, wrapped_cur_id ))
         },
         false => {
             None
@@ -178,13 +174,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
   
     tracing::info!("Signer:                  {}",signer_account_id.to_ss58check());
-    tracing::info!("Max issue amount:        {} {} sat",config.max_issue_amount, config.chain_wrapped_id);
-    tracing::info!("Min BTC balance:         {} {} sat",config.min_btc_balance, config.chain_wrapped_id);
+    tracing::info!("Max issue amount:        {} {} sat",config.max_issue_amount, wrapped_cur_str);
+    tracing::info!("Min BTC balance:         {} BTC sat",config.min_btc_balance);
     tracing::info!("{} BTC confirmations required",btc_conf.unwrap());
 
-    let mut balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
+    let mut balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_cur_id).await?;
     let mut balance_native = parachain.get_free_balance_for_id(signer_account_id.clone(),native_id).await?;
-    tracing::info!("Initial wrapped balance: {} {} sat", balance_wrapped, config.chain_wrapped_id);
+    tracing::info!("Initial wrapped balance: {} {} sat", balance_wrapped, wrapped_cur_str);
     tracing::info!("Initial native balance:  {} {} planck", balance_native, get_currency_str(native_id.inner().unwrap()));
     tracing::info!("Initial BTC balance:     {} BTC sat", balance_btc);
 
@@ -252,7 +248,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tracing::info!("Selected vault {} with issuable amount of {} {}",
                                 issue_vault.account_id.pretty_print(),
                                 max_issuable_amt,
-                                config.chain_wrapped_id );
+                                wrapped_cur_str );
             };
         };    
         if max_issuable_amt < config.min_btc_balance {
@@ -265,14 +261,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Emit Issue Request
         let issue_amount = if current_max_issue_amount > max_issuable_amt { max_issuable_amt } else { current_max_issue_amount };
-        let issue = parachain.request_issue(issue_amount, &issue_vault).await?;
         tracing::info!("Sending issue request for {} BTC sat to parachain", issue_amount);
+        let issue = parachain.request_issue(issue_amount, &issue_vault).await?;
         tracing::info!("Issue request accepted");
         // tracing::info!("Issue BTC address: {:?}",issue.vault_address);
         tracing::info!("Issue BTC address: {}",issue.vault_address.encode_str(BITCOIN_NETWORK).unwrap());
         
-        tracing::info!("Issue amount:     {} {} sat",issue.amount, config.chain_wrapped_id);
-        tracing::info!("Issue fee:        {} {} sat",issue.fee, config.chain_wrapped_id);
+        tracing::info!("Issue amount:     {} {} sat",issue.amount, wrapped_cur_str);
+        tracing::info!("Issue fee:        {} {} sat",issue.fee, wrapped_cur_str);
 
         tracing::info!("Building BTC transaction");
         // Send BTC transaction
@@ -304,16 +300,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut balance_wrapped_new: u128;
         let mut delta_wrapped : i128;
         loop {
-            balance_wrapped_new = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
+            balance_wrapped_new = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_cur_id).await?;
             delta_wrapped  = balance_wrapped_new as i128 - balance_wrapped as i128;
-            if cli.wait_for_issued_kbtc == 0 {
-                tracing::info!("Not waiting for parachain KBTC issue confirmation. {} balance and delta migth be incorrect",config.chain_wrapped_id);
+            if cli.wait_for_issued_wrapped == 0 {
+                tracing::info!("Not waiting for parachain {} issue confirmation. {} balance and delta migth be incorrect", wrapped_cur_str, wrapped_cur_str);
                 break;
             }
             if delta_wrapped != 0 {
                 break;
             }
-            tracing::info!("Waiting {} seconds for parachain KBTC issue confirmation", config.sleeptime_wait_for_btc_transfer);
+            tracing::info!("Waiting {} seconds for parachain {} issue confirmation", config.sleeptime_wait_for_btc_transfer, wrapped_cur_str);
             let _sleep_result = sleep_with_parachain_ping(parachain.clone(), config.sleeptime_wait_for_btc_transfer).await;
         }
 
@@ -342,10 +338,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let delta_native : i128 = balance_native_new as i128 - balance_native as i128;
         let balance_btc_new = Amount::as_sat(bitcoin_core.get_balance(btc_conf)?);
         let delta_btc : i128 = balance_btc_new as i128 - balance_btc as i128;
-        tracing::info!("Wrapped balance:       {} {} sat", balance_wrapped_new, config.chain_wrapped_id);
+        tracing::info!("Wrapped balance:       {} {} sat", balance_wrapped_new, wrapped_cur_str);
         tracing::info!("Native balance:        {} {} planck", balance_native_new, get_currency_str(native_id.inner().unwrap()));
         tracing::info!("BTC balance:           {} BTC sat", balance_btc_new);
-        tracing::info!("Delta wrapped balance: {} {} sat", delta_wrapped, config.chain_wrapped_id);
+        tracing::info!("Delta wrapped balance: {} {} sat", delta_wrapped, wrapped_cur_str);
         tracing::info!("Delta native balance:  {} {} planck", delta_native, get_currency_str(native_id.inner().unwrap()));
         tracing::info!("Delta BTC balance:     {} BTC sat", delta_btc);
         balance_wrapped = balance_wrapped_new;
