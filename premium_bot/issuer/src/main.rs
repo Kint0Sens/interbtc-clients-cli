@@ -152,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bitcoin_config = cli.bitcoin;
     // let wallet_name = Some("PremiumBotWallet".to_string());
     // let prefix = wallet_name.clone().unwrap_or_else(|| "PremiumBotWallet".to_string());
-    let bitcoin_core = bitcoin_config.new_client(Some(format!("PremiumBotWallet-master"))).await?;
+    let bitcoin_core = bitcoin_config.new_client(Some(TEXT_BTC_BOT_WALLET.to_string())).await?;
     bitcoin_core.sync().await?;
     bitcoin_core.create_or_load_wallet().await?;
     let mut balance_btc = Amount::as_sat(bitcoin_core.get_balance(btc_conf)?);
