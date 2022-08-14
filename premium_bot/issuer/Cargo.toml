@@ -1,6 +1,6 @@
 [package]
 name = "issuer"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["https://github.com/Kint0Sens"]
 edition = "2018"
 description = "InterBTC Premium Bot - Issue"

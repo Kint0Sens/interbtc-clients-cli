@@ -2,7 +2,10 @@ use common::Error;
 use std::env;
 use clap::Parser;
 use runtime::Error as RuntimeError;
-
+use lettre::{
+    transport::smtp::authentication::Credentials, AsyncSmtpTransport, AsyncTransport, Message,
+    Tokio1Executor,
+};
 use git_version::git_version;
 use common::*;
 // use std::thread;
@@ -22,8 +25,6 @@ use runtime::{
     PrettyPrint,
     InterBtcParachain,
     BtcAddress,
-    parse_collateral_currency,
-    parse_wrapped_currency,
 };
 use bitcoin::{
     PartialAddress,
@@ -39,9 +40,13 @@ const ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 #[clap(name = NAME, version = VERSION, author = AUTHORS, about = ABOUT)]
 struct Cli {
     /// Return all logs
-     /// Overridden by RUST_LOG env variable
-     #[clap(short, long, parse(from_occurrences))]
+    /// Overridden by RUST_LOG env variable
+    #[clap(short, long, parse(from_occurrences))]
     verbose: usize,
+
+    /// Report redeems by mail
+    #[clap(short, long, parse(from_occurrences))]
+    mail_on: usize,
 
     /// For testing consider all active vaults 
     /// as premium vaults.
@@ -102,13 +107,18 @@ pub struct ToolConfig {
     #[clap(long, default_value = "10")]
     sleeptime_main_loop: u64,
 
-    /// Collateral
-    #[clap(long, default_value = "KSM")]  // Make network dependent default
-    chain_collateral_id: String,
+    /// SMTP user
+    #[clap(long, default_value = "")]
+    smtp_username: String,
 
-    /// Wrapped
-    #[clap(long, default_value = "KBTC")] // Make network dependent default
-    chain_wrapped_id: String,
+    /// SMTP password
+    #[clap(long, default_value = "")]
+    smtp_password: String,
+
+    /// SMTP server
+    #[clap(long, default_value = "")]
+    smtp_server: String,
+    
 }
 #[allow(unreachable_code)]
 #[tokio::main]
@@ -116,11 +126,12 @@ async fn main() -> Result<(), Error> {
     let cli: Cli = Cli::parse();
     env_logger::init_from_env(init_logger(cli.verbose));
  
+    let report_redeem_by_mail = if cli.mail_on > 0 { true } else { false };
  
     let config = cli.config;
     // let redeem_amount = config.redeem_amount;
-    let collateral_id  = parse_collateral_currency(&config.chain_collateral_id).unwrap();
-    let wrapped_id  = parse_wrapped_currency(&config.chain_wrapped_id).unwrap();
+    // let collateral_id  = parse_collateral_currency(&parachain_cur_str).unwrap();
+    // let wrapped_id  = parse_wrapped_currency(&wrapped_cur_str).unwrap();
 
     // User keys
     let (key_pair, _) = cli.account_info.get_key_pair()?;
@@ -134,13 +145,19 @@ async fn main() -> Result<(), Error> {
     let parachain_config = cli.parachain;
     tracing::trace!("{}",TEXT_CONNECT_ATTEMPT);
     let parachain = parachain_config.try_connect(signer.clone(), shutdown_tx.clone()).await?;
+    let parachain_cur_id = parachain.relay_chain_currency_id;
+    let parachain_cur_str = get_currency_str(parachain_cur_id.inner().unwrap());
+    let wrapped_cur_id = parachain.wrapped_currency_id;
+    let wrapped_cur_str = get_currency_str(wrapped_cur_id.inner().unwrap());
     tracing::info!("{}",TEXT_CONNECTED);
     tracing::info!("{}",TEXT_SEPARATOR);
- 
+    tracing::info!("Relay chain currency {}",parachain_cur_str);
+    tracing::info!("Wrapped currency {}",wrapped_cur_str);
+
     
     let native_id = parachain.get_native_currency_id();
-    let mut balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
-    let mut balance_collateral = parachain.get_free_balance_for_id(signer_account_id.clone(),collateral_id).await?;
+    let mut balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_cur_id).await?;
+    let mut balance_collateral = parachain.get_free_balance_for_id(signer_account_id.clone(),parachain_cur_id).await?;
     let mut balance_native = parachain.get_free_balance_for_id(signer_account_id.clone(),native_id).await?;
     let redeem_dust_amount = parachain.get_redeem_dust_amount().await?;
 
@@ -164,10 +181,10 @@ async fn main() -> Result<(), Error> {
     if cli.treat_all_vaults_as_premium > 0 {
         tracing::info!("Treat all vaults as premium (for testing)");
     };
-    tracing::info!("Max redeem amount:          {} {} sat",config.max_redeem_amount, config.chain_wrapped_id);
-    tracing::info!("Min wrapped balance:        {} {} sat",config.min_wrapped_balance, config.chain_wrapped_id);
-    tracing::info!("Initial wrapped balance:    {} {} sat", balance_wrapped, config.chain_wrapped_id);
-    tracing::info!("Initial collateral balance: {} {} planck", balance_collateral, config.chain_collateral_id);
+    tracing::info!("Max redeem amount:          {} {} sat",config.max_redeem_amount, wrapped_cur_str);
+    tracing::info!("Min wrapped balance:        {} {} sat",config.min_wrapped_balance, wrapped_cur_str);
+    tracing::info!("Initial wrapped balance:    {} {} sat", balance_wrapped, wrapped_cur_str);
+    tracing::info!("Initial collateral balance: {} {} planck", balance_collateral, parachain_cur_str);
     tracing::info!("Initial native balance:     {} {} planck", balance_native, get_currency_str(native_id.inner().unwrap()));
     tracing::info!("Initial BTC balance:        {} BTC sat", balance_btc);
 
@@ -182,21 +199,21 @@ async fn main() -> Result<(), Error> {
     loop {
         loop_iteration = loop_iteration + 1;
         tracing::info!("[{}]{}",loop_iteration,TEXT_SEPARATOR);
-        balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
+        balance_wrapped = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_cur_id).await?;
         // Is there enough wrapped balance to proceed?
         let current_max_redeem_amount = if balance_wrapped < config.max_redeem_amount {
             balance_wrapped
         } else {
             config.max_redeem_amount
         };
-        tracing::info!("Max {} redeem amount for this iteration: {} ", config.chain_wrapped_id, current_max_redeem_amount);
+        tracing::info!("Max {} redeem amount for this iteration: {} ", wrapped_cur_str, current_max_redeem_amount);
         if current_max_redeem_amount < config.min_wrapped_balance {
-            tracing::warn!("{} balance (or max redeem amount) lower than minimum balance of {}  Sat", config.chain_wrapped_id, config.min_wrapped_balance);
+            tracing::warn!("{} balance (or max redeem amount) lower than minimum balance of {}  Sat", wrapped_cur_str, config.min_wrapped_balance);
             tracing::info!("Waiting {} seconds before checking again", config.sleeptime_not_enough_balance);
             let _sleep_result = sleep_with_parachain_ping(parachain.clone(), config.sleeptime_not_enough_balance).await;
             continue;
         } else {
-            tracing::info!("Sufficient {} balance to attempt premium redeems", config.chain_wrapped_id);
+            tracing::info!("Sufficient {} balance to attempt premium redeems", wrapped_cur_str);
         };
 
         // Are there some vaults with premium redeem available?
@@ -278,14 +295,14 @@ async fn main() -> Result<(), Error> {
         if redeem_amount <= redeem_dust_amount {
             tracing::info!("Redeem request amount  {} {} Sat is below dust level",
             redeem_amount,
-            config.chain_wrapped_id);
+            wrapped_cur_str);
             tracing::info!("Waiting {} seconds before checking again", config.sleeptime_no_premium_vault);
             let _sleep_result = sleep_with_parachain_ping(parachain.clone(), config.sleeptime_no_premium_vault).await;
             continue;
         } else {
             tracing::info!("Redeem request amount  {} {} Sat",
             redeem_amount,
-            config.chain_wrapped_id);
+            wrapped_cur_str);
         };
         let btc_address =get_new_btc_address(bitcoin_core.clone())?;
         let btc_address_str = btc_address.to_string();
@@ -296,7 +313,7 @@ async fn main() -> Result<(), Error> {
         let _redeem_id = parachain.request_redeem(redeem_amount, btc_address_intr, &target_vault_id).await?;
         tracing::info!("Parachain confirms redeem request of {} {} sat to BTC address {}",
                 redeem_amount,
-                config.chain_wrapped_id,
+                wrapped_cur_str,
                 btc_address_str
             );
 
@@ -322,26 +339,32 @@ async fn main() -> Result<(), Error> {
 
 
         // Evaluate the reward by checking balances and reporting deltas
-        let balance_wrapped_new = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_id).await?;
-        let balance_collateral_new = parachain.get_free_balance_for_id(signer_account_id.clone(),collateral_id).await?;
+        let balance_wrapped_new = parachain.get_free_balance_for_id(signer_account_id.clone(),wrapped_cur_id).await?;
+        let balance_collateral_new = parachain.get_free_balance_for_id(signer_account_id.clone(),parachain_cur_id).await?;
         let balance_native_new = parachain.get_free_balance_for_id(signer_account_id.clone(),native_id).await?;
         let delta_wrapped : i128 = balance_wrapped_new as i128 - balance_wrapped as i128;
         let delta_collateral : i128 = balance_collateral_new as i128 - balance_collateral as i128;
         let delta_native : i128 = balance_native_new as i128 - balance_native as i128;
         let balance_btc_new = Amount::as_sat(bitcoin_core.get_balance(btc_conf)?);
         let delta_btc : i128 = balance_btc_new as i128 - balance_btc as i128;
-        tracing::info!("Wrapped balance:          {} {} sat", balance_wrapped_new, config.chain_wrapped_id);
-        tracing::info!("Collateral balance:       {} {} planck", balance_collateral_new, config.chain_collateral_id);
+        tracing::info!("Wrapped balance:          {} {} sat", balance_wrapped_new, wrapped_cur_str);
+        tracing::info!("Collateral balance:       {} {} planck", balance_collateral_new, parachain_cur_str);
         tracing::info!("Native balance:           {} {} planck", balance_native_new, get_currency_str(native_id.inner().unwrap()));
         tracing::info!("BTC balance:              {} BTC sat", balance_btc_new);
-        tracing::info!("Delta wrapped balance:    {} {} sat", delta_wrapped, config.chain_wrapped_id);
-        tracing::info!("Delta collateral balance: {} {} planck", delta_collateral, config.chain_collateral_id);
+        tracing::info!("Delta wrapped balance:    {} {} sat", delta_wrapped, wrapped_cur_str);
+        tracing::info!("Delta collateral balance: {} {} planck", delta_collateral, parachain_cur_str);
         tracing::info!("Delta native balance:     {} {} planck", delta_native, get_currency_str(native_id.inner().unwrap()));
         tracing::info!("Delta BTC balance:        {} BTC sat", delta_btc);
         // balance_wrapped = balance_wrapped_new;  // balance_wrapped checked at start of loop  
         balance_collateral = balance_collateral_new;
         balance_native = balance_native_new;
         balance_btc = balance_btc_new;
+
+        // Send email if reporting by mail enabled
+        if report_redeem_by_mail {
+            
+            let _result = send_mail_on_redeem(config.smtp_username.clone(), config.smtp_password.clone(), config.smtp_server.clone()).await;
+        } ;
 
         tracing::info!("Waiting {} seconds before next loop iteration", config.sleeptime_main_loop);
         let _sleep_result = sleep_with_parachain_ping(parachain.clone(), config.sleeptime_main_loop).await;
@@ -380,7 +403,37 @@ async fn main() -> Result<(), Error> {
     }
 }
 
+async fn send_mail_on_redeem(smtp_username: String, smtp_password: String, smtp_server: String) -> Result<(), Error> {
+let smtp_credentials =
+Credentials::new(smtp_username, smtp_password);
 
-// let vault = parachain.get_vault(vault_id).await.unwrap()?;
-// let banned = vault.banned_until; 
-// if banned = None { //filters out banned vaults as of 1.11.2 
+let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_server)?
+.credentials(smtp_credentials)
+.build();
+
+let from = "Hello World <hello@world.com>";
+let to = "42 <42@42.com>";
+let subject = "Premium Bot redeem";
+let body = "<h1>Hello World</h1>".to_string();
+
+send_email_smtp(&mailer, from, to, subject, body).await
+}
+
+
+async fn send_email_smtp(
+    mailer: &AsyncSmtpTransport<Tokio1Executor>,
+    from: &str,
+    to: &str,
+    subject: &str,
+    body: String,
+) -> Result<(), Error> {
+    let email = Message::builder()
+        .from(from.parse()?)
+        .to(to.parse()?)
+        .subject(subject)
+        .body(body.to_string())?;
+
+    mailer.send(email).await?;
+
+    Ok(())
+}
