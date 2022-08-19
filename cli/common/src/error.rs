@@ -16,6 +16,12 @@ pub enum Error {
     InterbtcBitcoinError(#[from] bitcoin::Error),
     #[error("BitcoinError: {0}")]
     BitcoinError(#[from] bitcoincore_rpc::Error),
+    #[error("LettreTransportError: {0}")]
+    LettreTransportError(#[from] lettre::transport::smtp::Error),
+    #[error("LettreError: {0}")]
+    LettreError(#[from] lettre::error::Error),
+    #[error("LettreAddressError: {0}")]
+    LettreAddressError(#[from] lettre::address::AddressError),
     // #[error("CodecError: {0}")]
     // CodecError(#[from] CodecError),
     // #[error("JsonRpcError: {0}")]

@@ -12,7 +12,10 @@ members = [
   "cli/burn",
   "cli/issue",
   "cli/redeem",
-  "cli/transfer"
+  "cli/transfer",
+  "premium_bot/issuer",
+  "premium_bot/redeemer",
+  "cli/collateralization"
 ]
 
 [patch.crates-io]

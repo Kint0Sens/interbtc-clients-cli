@@ -1,4 +1,6 @@
 mod error;
+
+
 pub use error::Error;
 use sha2::{Digest, Sha256};
 // use serde::{
@@ -60,14 +62,16 @@ use runtime::{
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "standalone-metadata")] {
+        pub const TEXT_NETWORK : &str = "Standalone";
         pub const BITCOIN_NETWORK : bitcoin::Network = Network::Testnet;
         pub const ELECTRUM : &str = "ssl://electrum.blockstream.info:60002";
-        pub const TEXT_CONNECT_ATTEMPT : &str = "Attempting connection to Interlay Standalone parachain";
-        pub const TEXT_CONNECTED : &str = "Connected to Interlay Standalone parachain";
+        pub const TEXT_CONNECT_ATTEMPT : &str = "Attempting connection to Standalone parachain";
+        pub const TEXT_CONNECTED : &str = "Connected to Standalone parachain";
         pub const TEXT_BTC_CONNECT_ATTEMPT : &str = "Attempting connection to bitcoin Testnet network"; // Or Regtest?
         pub const TEXT_BTC_CONNECTED : &str = "Connected to bitcoin Testnet network";
         pub const TEXT_BTC_BOT_WALLET : &str = "PremiumBotWallet-Standaone";
     } else if #[cfg(feature = "parachain-metadata-kintsugi")] {
+        pub const TEXT_NETWORK : &str = "Kintsugi";
         pub const BITCOIN_NETWORK : bitcoin::Network = Network::Bitcoin;
         pub const ELECTRUM : &str = "ssl://electrum.blockstream.info:50002";
         pub const TEXT_CONNECT_ATTEMPT : &str = "Attempting connection to Kintsugi parachain";
@@ -76,6 +80,7 @@ cfg_if::cfg_if! {
         pub const TEXT_BTC_CONNECTED : &str = "Connected to bitcoin Bitcoin network";
         pub const TEXT_BTC_BOT_WALLET : &str = "PremiumBotWallet-Kintsugi";
     } else if #[cfg(feature = "parachain-metadata-interlay")] {
+        pub const TEXT_NETWORK : &str = "Interlay";
         pub const BITCOIN_NETWORK : bitcoin::Network = Network::Bitcoin;
         pub const ELECTRUM : &str = "ssl://electrum.blockstream.info:50002";
         pub const TEXT_CONNECT_ATTEMPT : &str = "Attempting connection to Interlay parachain";
@@ -84,6 +89,7 @@ cfg_if::cfg_if! {
         pub const TEXT_BTC_CONNECTED : &str = "Connected to bitcoin Bitcoin network";
         pub const TEXT_BTC_BOT_WALLET : &str = "PremiumBotWallet-Interlay";
     } else if #[cfg(feature = "parachain-metadata-kintsugi-testnet")] {
+        pub const TEXT_NETWORK : &str = "Kintsugi-Testnet";
         pub const BITCOIN_NETWORK : bitcoin::Network = Network::Testnet;
         pub const ELECTRUM : &str = "ssl://electrum.blockstream.info:60002";
         pub const TEXT_CONNECT_ATTEMPT : &str = "Attempting connection to Kintsugi Testnet parachain";
@@ -92,6 +98,7 @@ cfg_if::cfg_if! {
         pub const TEXT_BTC_CONNECTED : &str = "Connected to bitcoin Testnet network";
         pub const TEXT_BTC_BOT_WALLET : &str = "PremiumBotWallet-Kintsugi-Testnet";
     } else if #[cfg(feature = "parachain-metadata-interlay-testnet")] {
+        pub const TEXT_NETWORK : &str = "Interlay-Testnet";
         pub const BITCOIN_NETWORK : bitcoin::Network = Network::Testnet;
         pub const ELECTRUM : &str = "ssl://electrum.blockstream.info:60002";
         pub const TEXT_CONNECT_ATTEMPT : &str = "Attempting connection to Interlay Testnet parachain";
