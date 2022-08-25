@@ -169,7 +169,7 @@ async fn main() -> Result<(), Error> {
                     println!("   Tokens - To be replaced    {} {}", to_be_replaced_tokens_str, vault.id.currencies.wrapped.inner().unwrap().symbol());
     
                     collateralization_record.pending_wrapped = all_tokens;
-;
+
                     // let issuable_amount: u128 =  parachain.get_issuable_tokens_from_vault(vault.id.clone()).await?;
                     // let issuable_tokens_str = pretty_print_currency_amount(issuable_amount, vault.id.currencies.wrapped).unwrap();
                     // let collateralization_issued : String = match parachain
@@ -189,23 +189,26 @@ async fn main() -> Result<(), Error> {
                     //     },
                     // };
 
-                    let collateralization_all : String = match parachain
+                    let collateralization_all  = match parachain
                     .get_collateralization_from_vault(vault.id.clone(),false)
                     .await {
                         Ok(collateralization) => {
                             if  collateralization < lowest_collateralization  {
                                 lowest_collateralization = collateralization;
                             }
-                            pretty_print_planck_amount(collateralization, 16).unwrap()
+                            collateralization
+                            // pretty_print_planck_amount(collateralization, 16).unwrap()
                         },
                         Err(err) => {
                             // If issued tokens + to_be_issued_tokens are = 0 assume it is a / by 0 err
                             let all_issued_tokens = vault.issued_tokens + vault.to_be_issued_tokens;
                             if all_issued_tokens == 0 {
-                                "0".to_string()
+                                // "0".to_string()
+                            0
                             } else {
                                 tracing::error!("Error getting collateralization: {}", err);
-                            "0".to_string()
+                            // "0".to_string()
+                            0
                             }
                         },
                     };
@@ -235,9 +238,14 @@ async fn main() -> Result<(), Error> {
         }
 
         let lowest_collateralization_all = pretty_print_planck_amount(lowest_collateralization, 16).unwrap();
+        println!("{}",TEXT_SEPARATOR);
         println!("   Lowest Collateralization (pending)    {}", lowest_collateralization_all);
                         
+        println!("{}",TEXT_SEPARATOR);
+for data in collateralization_data {
+    println!("{:?}", data);
  
+}
     
      Ok(())
      
