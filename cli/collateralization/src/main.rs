@@ -2,9 +2,13 @@ use std::env;
 use clap::Parser;
 // use clap::Subcommand;
 use git_version::git_version;
-// use tabular::{Table, Row};
+use tabular::{Table, Row};
 
 //interBTC related
+use runtime::Token;
+use runtime::KSM;
+use runtime::VaultId;
+use runtime::InterBtcVault;
 use runtime::InterBtcSigner;
 use runtime::VaultRegistryPallet;
 use runtime::CurrencyIdExt;
@@ -16,6 +20,8 @@ use runtime::PrettyPrint;
 // use runtime::parse_wrapped_currency;
 
 use common::*;
+use chrono;
+use std::cmp::PartialOrd;
 
 const VERSION: &str = git_version!(args = ["--tags"]);
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
@@ -65,9 +71,9 @@ struct Cli {
     #[clap(flatten)]
     account_info: runtime::cli::ProviderUserOpts,
 
-//    /// Liquidation Vault - collateral token
-//    #[clap(long, default_value = "KSM")] 
-//    vault_collateral_id: String,
+   /// Vaults to output
+   #[clap(long, default_value = "10")] 
+   vaults2output: u8,
 
 //    /// Liquidation Vault - wrapped token
 //    #[clap(long, default_value = "KBTC")] 
@@ -78,12 +84,34 @@ struct Cli {
     parachain: runtime::cli::ConnectionOpts,
 }
 
-#[derive(Default)]
+// #[derive(PartialOrd)]
 struct CollateralizationData {
-    vault : String,
+    vault : InterBtcVault,
     pending_wrapped : u128, 
     pending_collateralization : u128,
     pending_collateral_in_wrapped : u128
+}
+impl CollateralizationData {
+    fn new() -> CollateralizationData {
+        CollateralizationData {
+            vault: InterBtcVault {
+                id: VaultId::new([3; 32].into(),Token(KSM),Token(KSM)),
+                status: VaultStatus::Active(true),
+                banned_until: None,
+                secure_collateral_threshold: None,
+                to_be_issued_tokens: 0,
+                issued_tokens: 0,
+                to_be_redeemed_tokens: 0,
+                to_be_replaced_tokens: 0,
+                replace_collateral: 0,
+                liquidated_collateral: 0,
+                active_replace_collateral: 0,
+            },
+            pending_wrapped : 0,
+            pending_collateralization : 0,
+            pending_collateral_in_wrapped : 0,
+        }
+    }
 }
 
 #[tokio::main]
@@ -109,66 +137,70 @@ async fn main() -> Result<(), Error> {
 
         let current_height = parachain.get_current_active_block_number().await?;
 
-        println!("Found {} vaults. Current block {}",vaults.len(), current_height);
+        println!("Found {} vaults. Current block {}. Current UTC timestamp {:?}",vaults.len(), current_height, chrono::offset::Utc::now());
 
         let mut lowest_collateralization : u128 = u128::MAX;
         let mut collateralization_data : Vec<CollateralizationData> = Vec::new();
         for vault in vaults.iter() {
 
-            let mut collateralization_record : CollateralizationData = CollateralizationData::default();
-            collateralization_record.vault = vault.id.account_id.pretty_print().to_string();
-
-            println!("");
-            println!("{}",TEXT_SEPARATOR);
-            println!("{}",vault.id.account_id.pretty_print());
+            let mut collateralization_record : CollateralizationData  = CollateralizationData::new();
+            collateralization_record.vault = vault.clone();
+    
+            // println!("");
+            // println!("{}",TEXT_SEPARATOR);
+            // println!("{}",vault.id.account_id.pretty_print());
 
             match vault.status {
                 VaultStatus::Active(active) => { 
                     // Banned info for active vaults
-                    let banned  : String = match vault.banned_until {
-                        None => {
-                            "".to_string()
-                        },
-                        Some(until) => {
-                            match active {
-                                true => { format!(" - Banned until {}",until) }, 
-                                false => { "".to_string() }, 
-                            }
-                        },
-                    };
+                    // let banned  : String = match vault.banned_until {
+                    //     None => {
+                    //         "".to_string()
+                    //     },
+                    //     Some(until) => {
+                    //         match active {
+                    //             true => { format!(" - Banned until {}",until) }, 
+                    //             false => { "".to_string() }, 
+                    //         }
+                    //     },
+                    // };
 
-                    // Check if accepts issues/redeems (active)
-                    let inactive : String = match active {
-                        true => { "Active".to_string() }, 
-                        false => { "Inactive".to_string() }, 
-                    };
+                    // // Check if accepts issues/redeems (active)
+                    // let inactive : String = match active {
+                    //     true => { "Active".to_string() }, 
+                    //     false => { "Inactive".to_string() }, 
+                    // };
 
-                    println!("   {}{}", inactive, banned);
+                    // println!("   {}{}", inactive, banned);
 
                     let total_collateral = parachain
                     .get_vault_total_collateral(vault.id.clone())
                     .await?;
-                    let total_collateral_str = pretty_print_currency_amount(total_collateral, vault.id.currencies.collateral).unwrap();
-                    println!("   Collateral                 {} {}", total_collateral_str, vault.id.currencies.collateral.inner().unwrap().symbol());
+                    // let total_collateral_str = pretty_print_currency_amount(total_collateral, vault.id.currencies.collateral).unwrap();
+                    // println!("   Collateral                 {} {}", total_collateral_str, vault.id.currencies.collateral.inner().unwrap().symbol());
 
 
-                    let issued_tokens_str = pretty_print_currency_amount(vault.issued_tokens, vault.id.currencies.wrapped).unwrap();
-                    let to_be_issued_tokens_str = pretty_print_currency_amount(vault.to_be_issued_tokens, vault.id.currencies.wrapped).unwrap();
-                    let to_be_redeemed_tokens_str = pretty_print_currency_amount(vault.to_be_redeemed_tokens, vault.id.currencies.wrapped).unwrap();
-                    let to_be_replaced_tokens_str = pretty_print_currency_amount(vault.to_be_replaced_tokens, vault.id.currencies.wrapped).unwrap();
+                    // let issued_tokens_str = pretty_print_currency_amount(vault.issued_tokens, vault.id.currencies.wrapped).unwrap();
+                    // let to_be_issued_tokens_str = pretty_print_currency_amount(vault.to_be_issued_tokens, vault.id.currencies.wrapped).unwrap();
+                    // let to_be_redeemed_tokens_str = pretty_print_currency_amount(vault.to_be_redeemed_tokens, vault.id.currencies.wrapped).unwrap();
+                    // let to_be_replaced_tokens_str = pretty_print_currency_amount(vault.to_be_replaced_tokens, vault.id.currencies.wrapped).unwrap();
         
                     let all_tokens = vault.issued_tokens 
                                     + vault.to_be_issued_tokens 
                                     - vault.to_be_redeemed_tokens 
                                     - vault.to_be_replaced_tokens;
-                    let all_tokens_str = pretty_print_currency_amount(all_tokens, vault.id.currencies.wrapped).unwrap();
-                    println!("   Tokens - Current           {} {}", issued_tokens_str, vault.id.currencies.wrapped.inner().unwrap().symbol());
-                    println!("   Tokens - Pending           {} {}", all_tokens_str, vault.id.currencies.wrapped.inner().unwrap().symbol());
-                    println!("   Tokens - To be issued      {} {}", to_be_issued_tokens_str, vault.id.currencies.wrapped.inner().unwrap().symbol());
-                    println!("   Tokens - To be redeemed    {} {}", to_be_redeemed_tokens_str, vault.id.currencies.wrapped.inner().unwrap().symbol());
-                    println!("   Tokens - To be replaced    {} {}", to_be_replaced_tokens_str, vault.id.currencies.wrapped.inner().unwrap().symbol());
+                    // let all_tokens_str = pretty_print_currency_amount(all_tokens, vault.id.currencies.wrapped).unwrap();
+                    // println!("   Tokens - Current           {} {}", issued_tokens_str, vault.id.currencies.wrapped.inner().unwrap().symbol());
+                    // println!("   Tokens - Pending           {} {}", all_tokens_str, vault.id.currencies.wrapped.inner().unwrap().symbol());
+                    // println!("   Tokens - To be issued      {} {}", to_be_issued_tokens_str, vault.id.currencies.wrapped.inner().unwrap().symbol());
+                    // println!("   Tokens - To be redeemed    {} {}", to_be_redeemed_tokens_str, vault.id.currencies.wrapped.inner().unwrap().symbol());
+                    // println!("   Tokens - To be replaced    {} {}", to_be_replaced_tokens_str, vault.id.currencies.wrapped.inner().unwrap().symbol());
     
+                    if all_tokens == 0 {
+                        continue;
+                    };
                     collateralization_record.pending_wrapped = all_tokens;
+                    
 
                     // let issuable_amount: u128 =  parachain.get_issuable_tokens_from_vault(vault.id.clone()).await?;
                     // let issuable_tokens_str = pretty_print_currency_amount(issuable_amount, vault.id.currencies.wrapped).unwrap();
@@ -176,7 +208,7 @@ async fn main() -> Result<(), Error> {
                     // .get_collateralization_from_vault(vault.id.clone(),true)
                     // .await {
                     //     Ok(collateralization) => {
-                    //         pretty_print_planck_amount(collateralization, 16).unwrap()
+                    //         c
                     //     },
                     //     Err(err) => {
                     //         // If issued tokens are = 0 assume it is a / by 0 err
@@ -214,18 +246,18 @@ async fn main() -> Result<(), Error> {
                     };
 
                     // println!("   Collateralization - issued {}", collateralization_issued);
-                    println!("   Collateralization - all    {}", collateralization_all);
+                    // println!("   Collateralization - all    {}", collateralization_all);
                     // println!("   Issuable tokens:           {} {}", issuable_tokens_str, vault.id.currencies.wrapped.inner().unwrap().symbol());
 
                     collateralization_record.pending_collateralization = collateralization_all;
-                    collateralization_record.pending_collateral_in_wrapped = collateralization_all / 10000000000000000 ;
+                    collateralization_record.pending_collateral_in_wrapped = collateralization_all / 1000000000000000000 ;
                     collateralization_record.pending_collateral_in_wrapped =
                         collateralization_record.pending_collateral_in_wrapped * collateralization_record.pending_wrapped;
 
                     
                     },
                 VaultStatus::Liquidated => {
-                    println!("Liquidated");
+                    // println!("Liquidated");
                 },
                 // VaultStatus::CommittedTheft => { 
                 //     println!("CommittedTheft");
@@ -237,17 +269,41 @@ async fn main() -> Result<(), Error> {
         
         }
 
-        let lowest_collateralization_all = pretty_print_planck_amount(lowest_collateralization, 16).unwrap();
+        let network_collateral_in_wrapped : u128 = collateralization_data.iter().map(|x| (x.pending_collateral_in_wrapped)).sum();
+        let network_wrapped : u128 = collateralization_data.iter().map(|x| (x.pending_wrapped)).sum();
+        let lowest_collateralization_str = pretty_print_planck_amount(lowest_collateralization, 16).unwrap();
+        let average_collateralization = 1000 * network_collateral_in_wrapped / network_wrapped;
+        let average_collateralization_str = pretty_print_planck_amount(average_collateralization, 1).unwrap();
+
         println!("{}",TEXT_SEPARATOR);
-        println!("   Lowest Collateralization (pending)    {}", lowest_collateralization_all);
+        println!("   Lowest Collateralization (pending)    {}", lowest_collateralization_str);
+        println!("   Average Collateralization (pending)   {}", average_collateralization_str);
                         
         println!("{}",TEXT_SEPARATOR);
-for data in collateralization_data {
-    println!("{:?}", data);
- 
-}
-    
+
+
+collateralization_data.sort_by(|a,b| a.pending_collateralization.partial_cmp(&b.pending_collateralization).unwrap());
+
+        let mut table = Table::new("{:<}-{:<}         {:>}  {:<} {:<}");
+        table
+            .add_heading("Vault                                              Collateralization Collateral( in_wrapped) Wrapped");
+        let mut count : u8 = 0;    
+        for data in collateralization_data {
+            if count > cli.vaults2output { break };
+            table
+            .add_row(Row::new()
+            .with_cell(data.vault.id.account_id.pretty_print().to_string())
+            .with_cell(data.vault.id.currencies.collateral.inner().unwrap().symbol())
+            .with_cell(pretty_print_planck_amount(data.pending_collateralization, 16).unwrap())
+            .with_cell(pretty_print_currency_amount(data.pending_collateral_in_wrapped,data.vault.id.currencies.wrapped).unwrap())
+            .with_cell(pretty_print_currency_amount(data.pending_wrapped,data.vault.id.currencies.wrapped).unwrap())
+            );
+            count = count + 1;
+        }
+        print!("{}", table);
      Ok(())
      
     }
+
+
 

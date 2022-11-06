@@ -1,0 +1,2 @@
+#!/bin/sh
+cargo build   --features parachain-metadata-kintsugi-testnet --target-dir ./target/kintsugi-testnet

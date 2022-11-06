@@ -1,2 +1,2 @@
 #!/bin/sh
-cargo build  --features parachain-metadata-kintsugi --target-dir ./target/kintsugi
+cargo build --release  --features parachain-metadata-kintsugi --target-dir ./target/kintsugi

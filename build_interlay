@@ -1,2 +1,2 @@
 #!/bin/sh
-cargo build --release  --features parachain-metadata-interlay --target-dir ./target/interlay
+cargo build   --features parachain-metadata-interlay --target-dir ./target/interlay
