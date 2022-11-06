@@ -1,6 +1,6 @@
-use crate::{metadata, Config, InterBtcRuntime, SS58_PREFIX};
+use crate::{metadata, Config, InterBtcRuntime, RuntimeCurrencyInfo, SS58_PREFIX};
 pub use metadata_aliases::*;
-use subxt::sp_core::{crypto::Ss58Codec, sr25519::Pair as KeyPair};
+pub use subxt::sp_core::{crypto::Ss58Codec, sr25519::Pair as KeyPair};
 
 pub use primitives::{
     CurrencyId,
@@ -43,6 +43,10 @@ mod metadata_aliases {
     pub type InterBtcRichBlockHeader = metadata::runtime_types::btc_relay::types::RichBlockHeader<BlockNumber>;
     pub type BitcoinBlockHeight = u32;
 
+    pub use metadata::asset_registry::events::{
+        RegisteredAsset as RegisteredAssetEvent, UpdatedAsset as UpdatedAssetEvent,
+    };
+
     pub use metadata::oracle::events::FeedValues as FeedValuesEvent;
 
     pub use metadata::issue::events::{
@@ -54,8 +58,6 @@ mod metadata_aliases {
         ExecuteReplace as ExecuteReplaceEvent, RequestReplace as RequestReplaceEvent,
         WithdrawReplace as WithdrawReplaceEvent,
     };
-
-    pub use metadata::refund::events::{ExecuteRefund as ExecuteRefundEvent, RequestRefund as RequestRefundEvent};
 
     pub use metadata::redeem::events::{ExecuteRedeem as ExecuteRedeemEvent, RequestRedeem as RequestRedeemEvent};
 
@@ -84,6 +86,8 @@ mod metadata_aliases {
 
     pub use metadata::runtime_types::bitcoin::types::H256Le;
 
+    pub use metadata::runtime_types::clients_info::ClientRelease;
+
     pub type InterBtcHeader = <InterBtcRuntime as Config>::Header;
 
     pub type InterBtcIssueRequest =
@@ -98,8 +102,7 @@ mod metadata_aliases {
     pub use metadata::runtime_types::interbtc_primitives::{
         redeem::RedeemRequestStatus, replace::ReplaceRequestStatus,
     };
-    pub type InterBtcRefundRequest =
-        metadata::runtime_types::interbtc_primitives::refund::RefundRequest<AccountId, Balance, CurrencyId>;
+
     pub type InterBtcReplaceRequest = metadata::runtime_types::interbtc_primitives::replace::ReplaceRequest<
         AccountId,
         BlockNumber,
@@ -167,7 +170,6 @@ mod account_id {
 
 mod vault_id {
     use super::*;
-    use primitives::CurrencyInfo;
 
     type RichVaultId = primitives::VaultId<AccountId, primitives::CurrencyId>;
 
@@ -198,14 +200,8 @@ mod vault_id {
             format!(
                 "{}[{}->{}]",
                 self.account_id.pretty_print(),
-                collateral_currency
-                    .inner()
-                    .map(|i| i.symbol().to_string())
-                    .unwrap_or_default(),
-                wrapped_currency
-                    .inner()
-                    .map(|i| i.symbol().to_string())
-                    .unwrap_or_default()
+                collateral_currency.symbol().unwrap_or_default(),
+                wrapped_currency.symbol().unwrap_or_default(),
             )
         }
     }

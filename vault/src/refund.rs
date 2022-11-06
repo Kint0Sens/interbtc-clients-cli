@@ -1,5 +1,4 @@
 use crate::{execution::*, system::VaultIdManager};
-use bitcoin::BitcoinCoreApi;
 use runtime::{InterBtcParachain, RequestRefundEvent};
 use service::{spawn_cancelable, Error as ServiceError, ShutdownSender};
 
@@ -13,12 +12,13 @@ use service::{spawn_cancelable, Error as ServiceError, ShutdownSender};
 /// * `network` - network the bitcoin network used (i.e. regtest/testnet/mainnet)
 /// * `num_confirmations` - the number of bitcoin confirmation to await
 /// * `process_refunds` - if true, we will process refund requests
-pub async fn listen_for_refund_requests<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
+pub async fn listen_for_refund_requests(
     shutdown_tx: ShutdownSender,
     parachain_rpc: InterBtcParachain,
-    vault_id_manager: VaultIdManager<B>,
+    vault_id_manager: VaultIdManager,
     num_confirmations: u32,
     process_refunds: bool,
+    auto_rbf: bool,
 ) -> Result<(), ServiceError> {
     parachain_rpc
         .on_event::<RequestRefundEvent, _, _, _>(
@@ -43,7 +43,9 @@ pub async fn listen_for_refund_requests<B: BitcoinCoreApi + Clone + Send + Sync 
                     tracing::info!("Executing refund #{:?}", event.refund_id);
                     // prepare the action that will be executed after the bitcoin transfer
                     let request = Request::from_refund_request_event(&event);
-                    let result = request.pay_and_execute(parachain_rpc, vault, num_confirmations).await;
+                    let result = request
+                        .pay_and_execute(parachain_rpc, vault, num_confirmations, auto_rbf)
+                        .await;
 
                     match result {
                         Ok(_) => tracing::info!(

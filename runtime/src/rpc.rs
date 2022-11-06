@@ -4,16 +4,15 @@ use crate::{
     metadata::{DispatchError, Event as InterBtcEvent},
     notify_retry,
     types::*,
-    AccountId, CurrencyId, Error, InterBtcRuntime, InterBtcSigner, RetryPolicy, RichH256Le, SubxtError,
+    AccountId, AssetRegistry, CurrencyId, Error, InterBtcRuntime, InterBtcSigner, RetryPolicy, RichH256Le, SubxtError,
 };
 use async_trait::async_trait;
 use codec::{Decode, Encode};
 use futures::{future::join_all, stream::StreamExt, FutureExt, SinkExt};
 use module_oracle_rpc_runtime_api::BalanceWrapper;
-use primitives::{CurrencyInfo, UnsignedFixedPoint};
+use primitives::UnsignedFixedPoint;
 use serde_json::Value;
-use sp_runtime::FixedPointNumber;
-use std::{collections::BTreeSet, future::Future, ops::RangeInclusive, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, future::Future, ops::Range, sync::Arc, time::Duration};
 use subxt::{
     rpc::{rpc_params, ClientT},
     BasicError, Client as SubxtClient, ClientBuilder as SubxtClientBuilder, Event, PolkadotExtrinsicParams, RpcClient,
@@ -39,41 +38,28 @@ compile_error!("Tests are only supported for the kintsugi testnet metadata");
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "parachain-metadata-interlay")] {
-        const DEFAULT_SPEC_VERSION: RangeInclusive<u32> = 1018000..=1018000;
-        const DEFAULT_SPEC_NAME: &str = "interlay-parachain";
+        const DEFAULT_SPEC_VERSION: Range<u32> = 1019000..1020000;
+        pub const DEFAULT_SPEC_NAME: &str = "interlay-parachain";
         pub const SS58_PREFIX: u16 = 2032;
     } else if #[cfg(feature = "parachain-metadata-kintsugi")] {
-        const DEFAULT_SPEC_VERSION: RangeInclusive<u32> = 1018000..=1018000;
-        const DEFAULT_SPEC_NAME: &str = "kintsugi-parachain";
+        const DEFAULT_SPEC_VERSION: Range<u32> = 1019000..1020000;
+        pub const DEFAULT_SPEC_NAME: &str = "kintsugi-parachain";
         pub const SS58_PREFIX: u16 = 2092;
     } else if #[cfg(feature = "parachain-metadata-interlay-testnet")] {
-        const DEFAULT_SPEC_VERSION: RangeInclusive<u32> = 1018000..=1018000;
-        const DEFAULT_SPEC_NAME: &str = "testnet-interlay";
+        const DEFAULT_SPEC_VERSION: Range<u32> = 1019000..1020000;
+        pub const DEFAULT_SPEC_NAME: &str = "testnet-interlay";
         pub const SS58_PREFIX: u16 = 2032;
     }  else if #[cfg(feature = "parachain-metadata-kintsugi-testnet")] {
-        const DEFAULT_SPEC_VERSION: RangeInclusive<u32> = 1018000..=1018000;
-        // fun workaround to migrate allowed spec name
-        struct ThisOrThat<'a>(&'a str, &'a str);
-        impl<'a> PartialEq<String> for ThisOrThat<'a> {
-            fn eq(&self, other: &String) -> bool {
-                self.0 == other || self.1 == other
-            }
-        }
-        impl<'a> From<ThisOrThat<'a>> for String {
-            fn from(tot: ThisOrThat<'a>) -> String {
-                tot.1.into()
-            }
-        }
-        const DEFAULT_SPEC_NAME: ThisOrThat = ThisOrThat(
-            "testnet-parachain",
-            "testnet-kintsugi"
-        );
+        const DEFAULT_SPEC_VERSION: Range<u32> = 1019000..1020000;
+        pub const DEFAULT_SPEC_NAME: &str = "testnet-kintsugi";
         pub const SS58_PREFIX: u16 = 2092;
     }
 }
 
 type RuntimeApi = metadata::RuntimeApi<InterBtcRuntime, PolkadotExtrinsicParams<InterBtcRuntime>>;
-pub(crate) type ShutdownSender = tokio::sync::broadcast::Sender<Option<()>>;
+pub(crate) type ShutdownSender = tokio::sync::broadcast::Sender<()>;
+pub(crate) type FeeRateUpdateSender = tokio::sync::broadcast::Sender<FixedU128>;
+pub type FeeRateUpdateReceiver = tokio::sync::broadcast::Receiver<FixedU128>;
 
 #[derive(Clone)]
 pub struct InterBtcParachain {
@@ -82,6 +68,7 @@ pub struct InterBtcParachain {
     account_id: AccountId,
     api: Arc<RuntimeApi>,
     shutdown_tx: ShutdownSender,
+    fee_rate_update_tx: FeeRateUpdateSender,
     pub native_currency_id: CurrencyId,
     pub relay_chain_currency_id: CurrencyId,
     pub wrapped_currency_id: CurrencyId,
@@ -115,8 +102,8 @@ impl InterBtcParachain {
             log::info!("transaction_version={}", runtime_version.transaction_version);
         } else {
             return Err(Error::InvalidSpecVersion(
-                *DEFAULT_SPEC_VERSION.start(),
-                *DEFAULT_SPEC_VERSION.end(),
+                DEFAULT_SPEC_VERSION.start,
+                DEFAULT_SPEC_VERSION.end,
                 runtime_version.spec_version,
             ));
         }
@@ -126,17 +113,24 @@ impl InterBtcParachain {
         let relay_chain_currency_id = currency_constants.get_relay_chain_currency_id()?;
         let wrapped_currency_id = currency_constants.get_wrapped_currency_id()?;
 
+        // low capacity channel since we generally only care about the newest value, so it's ok
+        // if we miss an event
+        let (fee_rate_update_tx, _) = tokio::sync::broadcast::channel(2);
+
         let parachain_rpc = Self {
             ext_client: Arc::new(ext_client),
             api: Arc::new(api),
             signer: Arc::new(RwLock::new(signer)),
             account_id,
             shutdown_tx,
+            fee_rate_update_tx,
             native_currency_id,
             relay_chain_currency_id,
             wrapped_currency_id,
         };
         parachain_rpc.refresh_nonce().await;
+        // TODO: refresh on registration
+        parachain_rpc.store_assets_metadata().await?;
         Ok(parachain_rpc)
     }
 
@@ -259,7 +253,7 @@ impl InterBtcParachain {
                 {
                     Err(_) => {
                         log::warn!("Timeout on transaction submission - restart required");
-                        let _ = self.shutdown_tx.send(Some(()));
+                        let _ = self.shutdown_tx.send(());
                         Err(Error::Timeout)
                     }
                     Ok(x) => Ok(x?),
@@ -544,41 +538,54 @@ impl InterBtcParachain {
         Ok(())
     }
 
-    pub async fn get_coingecko_id(&self, currency_id: CurrencyId) -> Result<String, Error> {
-        match currency_id {
-            CurrencyId::Token(x) => Ok(x.name().to_string()),
-            CurrencyId::ForeignAsset(id) => {
-                let metadata = self.get_foreign_asset_metadata(id).await?;
-                let coingecko_id = std::str::from_utf8(&metadata.additional.coingecko_id)?.to_owned();
-                Ok(coingecko_id)
-            }
-        }
+    pub async fn store_assets_metadata(&self) -> Result<(), Error> {
+        AssetRegistry::extend(self.get_foreign_assets_metadata().await?)
     }
 
-    pub async fn parse_currency_id(&self, symbol: String) -> Result<CurrencyId, Error> {
-        let uppercase_symbol = symbol.to_uppercase();
-        // try hardcoded currencies first
-        match uppercase_symbol.as_str() {
-            id if id == DOT.symbol() => Ok(Token(DOT)),
-            id if id == IBTC.symbol() => Ok(Token(IBTC)),
-            id if id == INTR.symbol() => Ok(Token(INTR)),
-            id if id == KSM.symbol() => Ok(Token(KSM)),
-            id if id == KBTC.symbol() => Ok(Token(KBTC)),
-            id if id == KINT.symbol() => Ok(Token(KINT)),
-            _ => self
-                .get_foreign_assets_metadata()
-                .await?
-                .into_iter()
-                .find_map(|(key, value)| {
-                    let asset_symbol = std::str::from_utf8(&value.symbol).ok()?.to_uppercase();
-                    if asset_symbol == uppercase_symbol {
-                        Some(Ok(CurrencyId::ForeignAsset(key)))
-                    } else {
-                        None
+    /// Cache registered assets and updates
+    pub async fn listen_for_registered_assets(&self) -> Result<(), Error> {
+        futures::future::try_join(
+            self.on_event::<RegisteredAssetEvent, _, _, _>(
+                |event| async move {
+                    if let Err(err) = AssetRegistry::insert(event.asset_id, event.metadata) {
+                        log::error!("Failed to register asset {}: {}", event.asset_id, err);
                     }
-                })
-                .unwrap_or(Err(Error::InvalidCurrency)),
-        }
+                },
+                |_| {},
+            ),
+            self.on_event::<UpdatedAssetEvent, _, _, _>(
+                |event| async move {
+                    if let Err(err) = AssetRegistry::insert(event.asset_id, event.metadata) {
+                        log::error!("Failed to update asset {}: {}", event.asset_id, err);
+                    }
+                },
+                |_| {},
+            ),
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    /// Listen to fee_rate changes and broadcast new values on the fee_rate_update_tx channel
+    pub async fn listen_for_fee_rate_changes(&self) -> Result<(), Error> {
+        self.on_event::<FeedValuesEvent, _, _, _>(
+            |event| async move {
+                for (key, value) in event.values {
+                    if let OracleKey::FeeEstimation = key {
+                        let _ = self.fee_rate_update_tx.send(value);
+                    }
+                }
+            },
+            |_error| {
+                // Don't propagate error, it's unlikely to be useful.
+                // We assume critical errors will cause the system to restart.
+                // Note that we can't send the error itself due to the channel requiring
+                // the type to be clonable, which Error isn't
+            },
+        )
+        .await?;
+        Ok(())
     }
 }
 
@@ -960,6 +967,8 @@ pub trait OraclePallet {
     async fn collateral_to_wrapped(&self, amount: u128, currency_id: CurrencyId) -> Result<u128, Error>;
 
     async fn has_updated(&self, key: &OracleKey) -> Result<bool, Error>;
+
+    fn on_fee_rate_change(&self) -> FeeRateUpdateReceiver;
 }
 
 #[async_trait]
@@ -1063,6 +1072,10 @@ impl OraclePallet for InterBtcParachain {
             .raw_values_updated(key, head)
             .await?
             .unwrap_or(false))
+    }
+
+    fn on_fee_rate_change(&self) -> FeeRateUpdateReceiver {
+        self.fee_rate_update_tx.subscribe()
     }
 }
 
@@ -1315,67 +1328,6 @@ impl RedeemPallet for InterBtcParachain {
     async fn get_redeem_period(&self) -> Result<BlockNumber, Error> {
         let head = self.get_latest_block_hash().await?;
         Ok(self.api.storage().redeem().redeem_period(head).await?)
-    }
-}
-
-#[async_trait]
-pub trait RefundPallet {
-    /// Execute a refund request by providing a Bitcoin transaction inclusion proof
-    async fn execute_refund(&self, refund_id: H256, merkle_proof: &[u8], raw_tx: &[u8]) -> Result<(), Error>;
-
-    /// Fetch a refund request from storage
-    async fn get_refund_request(&self, refund_id: H256) -> Result<InterBtcRefundRequest, Error>;
-
-    /// Get all refund requests requested of the given vault
-    async fn get_vault_refund_requests(
-        &self,
-        account_id: AccountId,
-    ) -> Result<Vec<(H256, InterBtcRefundRequest)>, Error>;
-}
-
-#[async_trait]
-impl RefundPallet for InterBtcParachain {
-    async fn execute_refund(&self, refund_id: H256, merkle_proof: &[u8], raw_tx: &[u8]) -> Result<(), Error> {
-        self.with_unique_signer(|signer| async move {
-            self.api
-                .tx()
-                .refund()
-                .execute_refund(refund_id, merkle_proof.into(), raw_tx.into())
-                .sign_and_submit_then_watch_default(&signer)
-                .await
-        })
-        .await?;
-        Ok(())
-    }
-
-    async fn get_refund_request(&self, refund_id: H256) -> Result<InterBtcRefundRequest, Error> {
-        let head = self.get_latest_block_hash().await?;
-        Ok(self
-            .api
-            .storage()
-            .refund()
-            .refund_requests(&refund_id, head)
-            .await?
-            .ok_or(Error::StorageItemNotFound)?)
-    }
-
-    async fn get_vault_refund_requests(
-        &self,
-        account_id: AccountId,
-    ) -> Result<Vec<(H256, InterBtcRefundRequest)>, Error> {
-        let head = self.get_latest_block_hash().await?;
-        let result: Vec<H256> = self
-            .rpc()
-            .request("refund_getVaultRefundRequests", rpc_params![account_id, head])
-            .await?;
-        join_all(
-            result
-                .into_iter()
-                .map(|key| async move { self.get_refund_request(key).await.map(|value| (key, value)) }),
-        )
-        .await
-        .into_iter()
-        .collect()
     }
 }
 
@@ -1793,13 +1745,18 @@ impl VaultRegistryPallet for InterBtcParachain {
     ///
     /// # Arguments
     /// * `uri` - URI to the client release binary
-    /// * `code_hash` - The runtime code hash associated with this client release
-    async fn set_current_client_release(&self, uri: &[u8], code_hash: &H256) -> Result<(), Error> {
+    /// * `checksum` - The SHA256 checksum of the client binary
+    async fn set_current_client_release(&self, uri: &[u8], checksum: &H256) -> Result<(), Error> {
         self.with_unique_signer(|signer| async move {
+            let release = ClientRelease {
+                uri: uri.to_vec(),
+                checksum: *checksum,
+            };
+
             self.api
                 .tx()
-                .vault_registry()
-                .set_current_client_release(uri.to_vec(), *code_hash)
+                .clients_info()
+                .set_current_client_release(uri.to_vec(), release)
                 .sign_and_submit_then_watch_default(&signer)
                 .await
         })
@@ -1811,13 +1768,18 @@ impl VaultRegistryPallet for InterBtcParachain {
     ///
     /// # Arguments
     /// * `uri` - URI to the client release binary
-    /// * `code_hash` - The runtime code hash associated with this client release
-    async fn set_pending_client_release(&self, uri: &[u8], code_hash: &H256) -> Result<(), Error> {
+    /// * `checksum` - The SHA256 checksum of the client binary
+    async fn set_pending_client_release(&self, uri: &[u8], checksum: &H256) -> Result<(), Error> {
         self.with_unique_signer(|signer| async move {
+            let release = ClientRelease {
+                uri: uri.to_vec(),
+                checksum: *checksum,
+            };
+
             self.api
                 .tx()
-                .vault_registry()
-                .set_pending_client_release(uri.to_vec(), *code_hash)
+                .clients_info()
+                .set_pending_client_release(uri.to_vec(), release)
                 .sign_and_submit_then_watch_default(&signer)
                 .await
         })

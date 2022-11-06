@@ -1,24 +1,20 @@
 use crate::{
     delay::RandomDelay, metrics::publish_expected_bitcoin_balance, Error, Event, IssueRequests, VaultIdManager,
 };
-use bitcoin::{BitcoinCoreApi, BlockHash, Transaction, TransactionExt};
+use bitcoin::{BlockHash, Error as BitcoinError, PublicKey, Transaction, TransactionExt};
 use futures::{channel::mpsc::Sender, future, SinkExt, StreamExt, TryFutureExt};
 use runtime::{
     BtcAddress, BtcPublicKey, BtcRelayPallet, CancelIssueEvent, ExecuteIssueEvent, H256Le, InterBtcParachain,
-    IssuePallet, IssueRequestStatus, PrettyPrint, RequestIssueEvent, UtilFuncs, VaultId, H256,
+    IssuePallet, IssueRequestStatus, PartialAddress, PrettyPrint, RequestIssueEvent, UtilFuncs, VaultId, H256,
 };
-use service::Error as ServiceError;
+use service::{DynBitcoinCoreApi, Error as ServiceError};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
-// we have seen scanning rates as low as 61 blocks/s. Process 100 blocks per time so that we
-// don't run into the 15 s timeout.
-const SCAN_CHUNK_SIZE: usize = 100;
-
 // initialize `issue_set` with currently open issues, and return the block height
 // from which to start watching the bitcoin chain
-pub(crate) async fn initialize_issue_set<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
-    bitcoin_core: &B,
+pub(crate) async fn initialize_issue_set(
+    bitcoin_core: &DynBitcoinCoreApi,
     btc_parachain: &InterBtcParachain,
     issue_set: &Arc<IssueRequests>,
 ) -> Result<u32, Error> {
@@ -40,8 +36,8 @@ pub(crate) async fn initialize_issue_set<B: BitcoinCoreApi + Clone + Send + Sync
 
 /// execute issue requests on best-effort (i.e. don't retry on error),
 /// returns an error if stream ends, otherwise runs forever
-pub async fn process_issue_requests<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
-    bitcoin_core: B,
+pub async fn process_issue_requests(
+    bitcoin_core: DynBitcoinCoreApi,
     btc_parachain: InterBtcParachain,
     issue_set: Arc<IssueRequests>,
     btc_start_height: u32,
@@ -51,29 +47,32 @@ pub async fn process_issue_requests<B: BitcoinCoreApi + Clone + Send + Sync + 's
     let mut stream =
         bitcoin::stream_in_chain_transactions(bitcoin_core.clone(), btc_start_height, num_confirmations).await;
 
-    while let Some(Ok((block_hash, transaction))) = stream.next().await {
-        tokio::spawn(
-            process_transaction_and_execute_issue(
-                bitcoin_core.clone(),
-                btc_parachain.clone(),
-                issue_set.clone(),
-                num_confirmations,
-                block_hash,
-                transaction,
-                random_delay.clone(),
-            )
-            .map_err(|e| {
-                tracing::warn!("Failed to execute issue request: {}", e.to_string());
-            }),
-        );
+    while let Some(result) = stream.next().await {
+        match result {
+            Ok((block_hash, transaction)) => tokio::spawn(
+                process_transaction_and_execute_issue(
+                    bitcoin_core.clone(),
+                    btc_parachain.clone(),
+                    issue_set.clone(),
+                    num_confirmations,
+                    block_hash,
+                    transaction,
+                    random_delay.clone(),
+                )
+                .map_err(|e| {
+                    tracing::warn!("Failed to execute issue request: {}", e.to_string());
+                }),
+            ),
+            Err(err) => return Err(err.into()),
+        };
     }
 
     // stream closed, restart client
     Err(ServiceError::ClientShutdown)
 }
 
-pub async fn add_keys_from_past_issue_request<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
-    bitcoin_core: &B,
+pub async fn add_keys_from_past_issue_request(
+    bitcoin_core: &DynBitcoinCoreApi,
     btc_parachain: &InterBtcParachain,
     vault_id: &VaultId,
 ) -> Result<(), Error> {
@@ -107,10 +106,9 @@ pub async fn add_keys_from_past_issue_request<B: BitcoinCoreApi + Clone + Send +
 
     // in parallel, rescan what blockchain we do have stored locally
     tracing::info!("Rescanning bitcoin chain from height {}...", rescan_start_height);
-    for (range_start, range_end) in chunks(rescan_start_height, btc_end_height) {
-        tracing::debug!("Scanning chain blocks {range_start}-{range_end}...");
-        bitcoin_core.rescan_blockchain(range_start, range_end).await?;
-    }
+    bitcoin_core
+        .rescan_blockchain(rescan_start_height, btc_end_height)
+        .await?;
 
     // also check in electrs in case there were any requests from before the pruned height
     if btc_start_height < btc_pruned_start_height {
@@ -125,7 +123,7 @@ pub async fn add_keys_from_past_issue_request<B: BitcoinCoreApi + Clone + Send +
                     .into_iter()
                     .filter_map(|(_, request)| {
                         if (request.btc_height as usize) < btc_pruned_start_height {
-                            Some(request.btc_address)
+                            Some(request.btc_address.to_address(bitcoin_core.network()).ok()?)
                         } else {
                             None
                         }
@@ -138,16 +136,9 @@ pub async fn add_keys_from_past_issue_request<B: BitcoinCoreApi + Clone + Send +
     Ok(())
 }
 
-/// Return the chunks of size SCAN_CHUNK_SIZE from first..last (including).
-fn chunks(first: usize, last: usize) -> impl Iterator<Item = (usize, usize)> {
-    (first..last)
-        .step_by(SCAN_CHUNK_SIZE)
-        .map(move |x| (x, usize::min(x + SCAN_CHUNK_SIZE - 1, last)))
-}
-
 /// execute issue requests with a matching Bitcoin payment
-async fn process_transaction_and_execute_issue<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
-    bitcoin_core: B,
+async fn process_transaction_and_execute_issue(
+    bitcoin_core: DynBitcoinCoreApi,
     btc_parachain: InterBtcParachain,
     issue_set: Arc<IssueRequests>,
     num_confirmations: u32,
@@ -155,15 +146,24 @@ async fn process_transaction_and_execute_issue<B: BitcoinCoreApi + Clone + Send 
     transaction: Transaction,
     random_delay: Arc<Box<dyn RandomDelay + Send + Sync>>,
 ) -> Result<(), Error> {
-    let addresses = transaction.extract_output_addresses::<BtcAddress>();
+    let addresses: Vec<BtcAddress> = transaction
+        .extract_output_addresses()
+        .into_iter()
+        .filter_map(|payload| BtcAddress::from_payload(payload).ok())
+        .collect();
     let mut issue_requests = issue_set.lock().await;
     if let Some((issue_id, address)) = addresses.iter().find_map(|address| {
         let issue_id = issue_requests.get_key_for_value(address)?;
         Some((*issue_id, *address))
     }) {
         let issue = btc_parachain.get_issue_request(issue_id).await?;
+        let payload = if let Ok(payload) = address.to_payload() {
+            payload
+        } else {
+            return Ok(());
+        };
         // tx has output to address
-        match transaction.get_payment_amount_to(address) {
+        match transaction.get_payment_amount_to(payload) {
             None => {
                 // this should never happen, so use WARN
                 tracing::warn!(
@@ -203,7 +203,7 @@ async fn process_transaction_and_execute_issue<B: BitcoinCoreApi + Clone + Send 
                 // this transaction
                 (*random_delay).delay(&issue_id.to_fixed_bytes()).await?;
                 let issue = btc_parachain.get_issue_request(issue_id).await?;
-                if let IssueRequestStatus::Completed(_) = issue.status {
+                if let IssueRequestStatus::Completed = issue.status {
                     tracing::info!("Issue {} has already been executed - doing nothing.", issue_id);
                     return Ok(());
                 }
@@ -237,8 +237,8 @@ async fn process_transaction_and_execute_issue<B: BitcoinCoreApi + Clone + Send 
 }
 
 /// Import the deposit key using the on-chain key derivation scheme
-async fn add_new_deposit_key<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
-    bitcoin_core: &B,
+async fn add_new_deposit_key(
+    bitcoin_core: &DynBitcoinCoreApi,
     secure_id: H256,
     public_key: BtcPublicKey,
 ) -> Result<(), Error> {
@@ -247,8 +247,12 @@ async fn add_new_deposit_key<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
     hasher.input(public_key.0);
     // input issue id
     hasher.input(secure_id.as_bytes());
+
     bitcoin_core
-        .add_new_deposit_key(public_key.0, hasher.result().as_slice().to_vec())
+        .add_new_deposit_key(
+            PublicKey::from_slice(&public_key.0).map_err(BitcoinError::KeyError)?,
+            hasher.result().as_slice().to_vec(),
+        )
         .await?;
     Ok(())
 }
@@ -262,8 +266,8 @@ async fn add_new_deposit_key<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
 /// * `btc_parachain` - the parachain RPC handle
 /// * `event_channel` - the channel over which to signal events
 /// * `issue_set` - all issue ids observed since vault started
-pub async fn listen_for_issue_requests<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
-    btc_rpc: VaultIdManager<B>,
+pub async fn listen_for_issue_requests(
+    btc_rpc: VaultIdManager,
     btc_parachain: InterBtcParachain,
     event_channel: Sender<Event>,
     issue_set: Arc<IssueRequests>,
@@ -367,15 +371,4 @@ pub async fn listen_for_issue_cancels(
         )
         .await?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_chunks() {
-        let result: Vec<_> = chunks(50, 316).collect();
-        assert_eq!(result, vec![(50, 149), (150, 249), (250, 316)]);
-    }
 }

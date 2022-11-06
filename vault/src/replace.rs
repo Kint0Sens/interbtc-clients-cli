@@ -2,13 +2,13 @@ use crate::{
     cancellation::Event, error::Error, execution::Request, metrics::publish_expected_bitcoin_balance,
     system::VaultIdManager,
 };
-use bitcoin::BitcoinCoreApi;
+use bitcoin::Error as BitcoinError;
 use futures::{channel::mpsc::Sender, future::try_join3, SinkExt};
 use runtime::{
-    AcceptReplaceEvent, CollateralBalancesPallet, ExecuteReplaceEvent, InterBtcParachain, PrettyPrint, ReplacePallet,
-    RequestReplaceEvent, UtilFuncs, VaultId, VaultRegistryPallet,
+    AcceptReplaceEvent, BtcAddress, CollateralBalancesPallet, ExecuteReplaceEvent, InterBtcParachain, PartialAddress,
+    PrettyPrint, ReplacePallet, RequestReplaceEvent, UtilFuncs, VaultId, VaultRegistryPallet,
 };
-use service::{spawn_cancelable, Error as ServiceError, ShutdownSender};
+use service::{spawn_cancelable, DynBitcoinCoreApi, Error as ServiceError, ShutdownSender};
 use std::time::Duration;
 
 /// Listen for AcceptReplaceEvent directed at this vault and continue the replacement
@@ -19,12 +19,13 @@ use std::time::Duration;
 /// * `parachain_rpc` - the parachain RPC handle
 /// * `btc_rpc` - the bitcoin RPC handle
 /// * `num_confirmations` - the number of bitcoin confirmation to await
-pub async fn listen_for_accept_replace<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
+pub async fn listen_for_accept_replace(
     shutdown_tx: ShutdownSender,
     parachain_rpc: InterBtcParachain,
-    vault_id_manager: VaultIdManager<B>,
+    vault_id_manager: VaultIdManager,
     num_confirmations: u32,
     payment_margin: Duration,
+    auto_rbf: bool,
 ) -> Result<(), ServiceError> {
     let parachain_rpc = &parachain_rpc;
     let vault_id_manager = &vault_id_manager;
@@ -54,7 +55,9 @@ pub async fn listen_for_accept_replace<B: BitcoinCoreApi + Clone + Send + Sync +
                             parachain_rpc.get_replace_request(event.replace_id).await?,
                             payment_margin,
                         )?;
-                        request.pay_and_execute(parachain_rpc, vault, num_confirmations).await
+                        request
+                            .pay_and_execute(parachain_rpc, vault, num_confirmations, auto_rbf)
+                            .await
                     }
                     .await;
 
@@ -85,9 +88,9 @@ pub async fn listen_for_accept_replace<B: BitcoinCoreApi + Clone + Send + Sync +
 /// * `parachain_rpc` - the parachain RPC handle
 /// * `event_channel` - the channel over which to signal events
 /// * `accept_replace_requests` - if true, we attempt to accept replace requests
-pub async fn listen_for_replace_requests<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
+pub async fn listen_for_replace_requests(
     parachain_rpc: InterBtcParachain,
-    btc_rpc: VaultIdManager<B>,
+    btc_rpc: VaultIdManager,
     event_channel: Sender<Event>,
     accept_replace_requests: bool,
 ) -> Result<(), ServiceError> {
@@ -141,14 +144,11 @@ pub async fn listen_for_replace_requests<B: BitcoinCoreApi + Clone + Send + Sync
 
 /// Attempts to accept a replace request. Does not retry RPC calls upon
 /// failure, since nothing is at stake at this point
-pub async fn handle_replace_request<
-    B: BitcoinCoreApi + Clone,
-    P: CollateralBalancesPallet + ReplacePallet + VaultRegistryPallet,
->(
+pub async fn handle_replace_request<'a, P: CollateralBalancesPallet + ReplacePallet + VaultRegistryPallet>(
     parachain_rpc: P,
-    btc_rpc: B,
-    event: &RequestReplaceEvent,
-    vault_id: &VaultId,
+    btc_rpc: DynBitcoinCoreApi,
+    event: &'a RequestReplaceEvent,
+    vault_id: &'a VaultId,
 ) -> Result<(), Error> {
     let collateral_currency = vault_id.collateral_currency();
 
@@ -170,7 +170,7 @@ pub async fn handle_replace_request<
                 &event.old_vault_id,
                 event.amount,
                 0, // do not lock any additional collateral
-                btc_rpc.get_new_address().await?,
+                BtcAddress::from_address(btc_rpc.get_new_address().await?).map_err(BitcoinError::ConversionError)?,
             )
             .await?)
     }
@@ -209,13 +209,14 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use bitcoin::{
-        json, Amount, Block, BlockHash, BlockHeader, Error as BitcoinError, GetBlockResult, LockedTransaction, Network,
-        PartialAddress, PrivateKey, Transaction, TransactionMetadata, Txid, PUBLIC_KEY_SIZE,
+        json, Address, Amount, BitcoinCoreApi, Block, BlockHash, BlockHeader, Error as BitcoinError, Network,
+        PrivateKey, PublicKey, SatPerVbyte, Transaction, TransactionMetadata, Txid,
     };
     use runtime::{
         AccountId, Balance, BtcAddress, BtcPublicKey, CurrencyId, Error as RuntimeError, InterBtcReplaceRequest,
         InterBtcVault, Token, DOT, H256, IBTC,
     };
+    use std::{str::FromStr, sync::Arc};
 
     macro_rules! assert_err {
         ($result:expr, $err:pat) => {{
@@ -242,20 +243,18 @@ mod tests {
             async fn get_proof(&self, txid: Txid, block_hash: &BlockHash) -> Result<Vec<u8>, BitcoinError>;
             async fn get_block_hash(&self, height: u32) -> Result<BlockHash, BitcoinError>;
             async fn get_pruned_height(&self) -> Result<u64, BitcoinError>;
-            async fn is_block_known(&self, block_hash: BlockHash) -> Result<bool, BitcoinError>;
-            async fn get_new_address<A: PartialAddress + Send + 'static>(&self) -> Result<A, BitcoinError>;
-            async fn get_new_public_key<P: From<[u8; PUBLIC_KEY_SIZE]> + 'static>(&self) -> Result<P, BitcoinError>;
-            fn dump_derivation_key<P: Into<[u8; PUBLIC_KEY_SIZE]> + Send + Sync + 'static>(&self, public_key: P) -> Result<PrivateKey, BitcoinError>;
+            async fn get_new_address(&self) -> Result<Address, BitcoinError>;
+            async fn get_new_public_key(&self) -> Result<PublicKey, BitcoinError>;
+            fn dump_derivation_key(&self, public_key: &PublicKey) -> Result<PrivateKey, BitcoinError>;
             fn import_derivation_key(&self, private_key: &PrivateKey) -> Result<(), BitcoinError>;
-            async fn add_new_deposit_key<P: Into<[u8; PUBLIC_KEY_SIZE]> + Send + Sync + 'static>(
+            async fn add_new_deposit_key(
                 &self,
-                public_key: P,
+                public_key: PublicKey,
                 secret_key: Vec<u8>,
             ) -> Result<(), BitcoinError>;
             async fn get_best_block_hash(&self) -> Result<BlockHash, BitcoinError>;
             async fn get_block(&self, hash: &BlockHash) -> Result<Block, BitcoinError>;
             async fn get_block_header(&self, hash: &BlockHash) -> Result<BlockHeader, BitcoinError>;
-            async fn get_block_info(&self, hash: &BlockHash) -> Result<GetBlockResult, BitcoinError>;
             async fn get_mempool_transactions<'a>(
                 &'a self,
             ) -> Result<Box<dyn Iterator<Item = Result<Transaction, BitcoinError>> + Send + 'a>, BitcoinError>;
@@ -264,38 +263,33 @@ mod tests {
                 txid: Txid,
                 num_confirmations: u32,
             ) -> Result<TransactionMetadata, BitcoinError>;
-            async fn create_transaction<A: PartialAddress + Send + Sync + 'static>(
+            async fn create_and_send_transaction(
                 &self,
-                address: A,
+                address: Address,
                 sat: u64,
-                fee_rate: u64,
-                request_id: Option<H256>,
-            ) -> Result<LockedTransaction, BitcoinError>;
-            async fn send_transaction(&self, transaction: LockedTransaction) -> Result<Txid, BitcoinError>;
-            async fn create_and_send_transaction<A: PartialAddress + Send + Sync + 'static>(
-                &self,
-                address: A,
-                sat: u64,
-                fee_rate: u64,
+                fee_rate: SatPerVbyte,
                 request_id: Option<H256>,
             ) -> Result<Txid, BitcoinError>;
-            async fn send_to_address<A: PartialAddress + Send + Sync + 'static>(
+            async fn send_to_address(
                 &self,
-                address: A,
+                address: Address,
                 sat: u64,
                 request_id: Option<H256>,
-                fee_rate: u64,
+                fee_rate: SatPerVbyte,
                 num_confirmations: u32,
             ) -> Result<TransactionMetadata, BitcoinError>;
             async fn create_or_load_wallet(&self) -> Result<(), BitcoinError>;
-            async fn wallet_has_public_key<P>(&self, public_key: P) -> Result<bool, BitcoinError>
-                where
-                    P: Into<[u8; PUBLIC_KEY_SIZE]> + From<[u8; PUBLIC_KEY_SIZE]> + Clone + PartialEq + Send + Sync + 'static;
-            async fn import_private_key(&self, privkey: PrivateKey) -> Result<(), BitcoinError>;
             async fn rescan_blockchain(&self, start_height: usize, end_height: usize) -> Result<(), BitcoinError>;
-            async fn rescan_electrs_for_addresses<A: PartialAddress + Send + Sync + 'static>(&self, addresses: Vec<A>) -> Result<(), BitcoinError>;
-            async fn find_duplicate_payments(&self, transaction: &Transaction) -> Result<Vec<(Txid, BlockHash)>, BitcoinError>;
+            async fn rescan_electrs_for_addresses(&self, addresses: Vec<Address>) -> Result<(), BitcoinError>;
             fn get_utxo_count(&self) -> Result<usize, BitcoinError>;
+            async fn bump_fee(
+                &self,
+                txid: &Txid,
+                address: Address,
+                fee_rate: SatPerVbyte,
+            ) -> Result<Txid, BitcoinError>;
+            async fn is_in_mempool(&self, txid: Txid) -> Result<bool, BitcoinError>;
+            async fn fee_rate(&self, txid: Txid) -> Result<SatPerVbyte, BitcoinError>;
         }
     }
 
@@ -364,8 +358,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_replace_request_with_insufficient_balance() {
-        let mut bitcoin = MockBitcoin::default();
-        bitcoin.expect_get_new_address().returning(|| Ok(BtcAddress::default()));
+        let mut mock_bitcoin = MockBitcoin::default();
+        mock_bitcoin
+            .expect_get_new_address()
+            .returning(|| Ok(Address::from_str("bcrt1q6v2c7q7uv8vu6xle2k9ryfj3y3fuuy4rqnl50f").unwrap()));
+        let btc_rpc: DynBitcoinCoreApi = Arc::new(mock_bitcoin);
 
         let mut parachain_rpc = MockProvider::default();
         parachain_rpc
@@ -382,15 +379,18 @@ mod tests {
             griefing_collateral: Default::default(),
         };
         assert_err!(
-            handle_replace_request(parachain_rpc, bitcoin, &event, &dummy_vault_id()).await,
+            handle_replace_request(parachain_rpc, btc_rpc, &event, &dummy_vault_id()).await,
             Error::InsufficientFunds
         );
     }
 
     #[tokio::test]
     async fn test_handle_replace_request_with_sufficient_balance() {
-        let mut bitcoin = MockBitcoin::default();
-        bitcoin.expect_get_new_address().returning(|| Ok(BtcAddress::default()));
+        let mut mock_bitcoin = MockBitcoin::default();
+        mock_bitcoin
+            .expect_get_new_address()
+            .returning(|| Ok(Address::from_str("bcrt1q6v2c7q7uv8vu6xle2k9ryfj3y3fuuy4rqnl50f").unwrap()));
+        let btc_rpc: DynBitcoinCoreApi = Arc::new(mock_bitcoin);
 
         let mut parachain_rpc = MockProvider::default();
         parachain_rpc
@@ -407,7 +407,7 @@ mod tests {
             amount: Default::default(),
             griefing_collateral: Default::default(),
         };
-        handle_replace_request(parachain_rpc, bitcoin, &event, &dummy_vault_id())
+        handle_replace_request(parachain_rpc, btc_rpc, &event, &dummy_vault_id())
             .await
             .unwrap();
     }

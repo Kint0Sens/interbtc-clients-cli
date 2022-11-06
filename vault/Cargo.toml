@@ -6,16 +6,17 @@ edition = "2018"
 description = "The Vault client intermediates between Bitcoin Core and the BTC Parachain."
 
 [features]
-integration = []
 parachain-metadata-interlay = ["runtime/parachain-metadata-interlay"]
 parachain-metadata-kintsugi = ["runtime/parachain-metadata-kintsugi"]
-parachain-metadata-interlay-testnet = ["runtime/parachain-metadata-interlay-testnet"]
-parachain-metadata-kintsugi-testnet = ["runtime/parachain-metadata-kintsugi-testnet"]
+parachain-metadata-interlay-testnet = ["runtime/parachain-metadata-interlay-testnet", "bitcoin/light-client"]
+parachain-metadata-kintsugi-testnet = ["runtime/parachain-metadata-kintsugi-testnet", "bitcoin/light-client"]
+uses-bitcoind = [] # run tests relying on bitcoind regtest node
 
 [dependencies]
 thiserror = "1.0"
-clap = "3.1"
+clap = { version = "4.0.17", features = ["derive"]}
 tokio = { version = "1.0", features = ["full"] }
+tokio-stream = { version = "0.1.9", features = ["sync"]  }
 tokio-metrics = { version = "0.1.0", default-features = false }
 serde = "1.0.136"
 parity-scale-codec = "3.0.0"
@@ -24,7 +25,12 @@ futures = "0.3.5"
 async-trait = "0.1.40"
 sha2 = "0.8.2"
 git-version = "0.3.4"
-
+sysinfo = "0.26.1"
+signal-hook = "0.3.14"
+signal-hook-tokio = { version = "0.3.1", features = ["futures-v0_3"] }
+serde_json = "1.0.71"
+# note: secp256k1 needs to be the same as the dependency in bitcoincore-rpc
+secp256k1 = { version = "0.24.0", features = ["rand", "rand-std"] }
 lazy_static = "1.4"
 
 tracing = { version = "0.1", features = ["log"] }
@@ -40,15 +46,17 @@ runtime = { path = "../runtime" }
 service = { path = "../service" }
 
 # Substrate dependencies
-sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
-sp-keyring = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
-sp-arithmetic = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
+sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+sp-keyring = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+sp-arithmetic = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
 
 [dev-dependencies]
 mockall = "0.8.1"
+serial_test = "0.9.0"
 
 # Workspace dependencies
 runtime = { path = "../runtime", features = ["testing-utils"] }
+bitcoin = { path = "../bitcoin", features = ["cli", "regtest-manual-mining"] }
 
 # Substrate dependencies
-frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
+frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }

@@ -5,41 +5,40 @@ authors = ["Interlay <contact@interlay.io>"]
 edition = "2018"
 
 [features]
-default = ["interbtc"]
-regtest-mine-on-tx = []
+default = []
 regtest-manual-mining = []
 cli = ["clap"]
-interbtc = ["interbtc-bitcoin"]
 uses-bitcoind = []
+light-client = []
 
 [dependencies]
 thiserror = "1.0"
-bitcoincore-rpc = { git = "https://github.com/rust-bitcoin/rust-bitcoincore-rpc", rev = "d9a1dd014f8eff8b00618457bb6b845c8b932bb7" }
+bitcoincore-rpc = { git = "https://github.com/rust-bitcoin/rust-bitcoincore-rpc", rev = "bde02d7fbf031df7d3a49946ec0e7f1abde34e58" }
 hex = "0.4.2"
 async-trait = "0.1.40"
 tokio = { version = "1.0", features = ["full"] }
 backoff = { version = "0.3.0", features = ["tokio"] }
-clap = { version = "3.1", features = ["derive", "std", "env"], optional = true }
+clap = { version = "4.0.17", features = ["derive", "std", "env"], optional = true }
 num = "0.2"
 num-traits = "0.2"
 num-derive = "0.3"
 futures = "0.3.5"
-serde_json = "1.0.71"
 log = "0.4.0"
 hyper = "0.10"
 esplora-btc-api = "1.0.3"
+sha2 = "0.8.2"
+cfg-if = "1.0"
+
 reqwest = "0.11.11"
+url = "2.2.2"
+
+serde = "1.0.139"
+serde_json = "1.0.82"
 
 # Substrate dependencies
-sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
-
-[dependencies.interbtc-bitcoin]
-git = "https://github.com/interlay/interbtc"
-rev = "2ddb5eba6fdb42125805bf15d8a4caf30556e0ab"
-package = "bitcoin"
-optional = true
+sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
 
 [dev-dependencies]
 mockall = "0.8.1"
 regex = "1.4.3"
-rand = { version = "0.7" }
+rand = "0.7"

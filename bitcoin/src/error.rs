@@ -1,4 +1,4 @@
-use crate::BitcoinError;
+use crate::{BitcoinError, BitcoinLightError, ElectrsError};
 use bitcoincore_rpc::{
     bitcoin::{
         consensus::encode::Error as BitcoinEncodeError,
@@ -9,15 +9,21 @@ use bitcoincore_rpc::{
     jsonrpc::{error::RpcError, Error as JsonRpcError},
 };
 use hex::FromHexError;
-use reqwest::Error as ReqwestError;
 use serde_json::Error as SerdeJsonError;
+use std::{io::Error as IoError, num::TryFromIntError, string::FromUtf8Error};
 use thiserror::Error;
 use tokio::time::error::Elapsed;
 
-type ElectrsTxByScriptHashError =
-    esplora_btc_api::apis::Error<esplora_btc_api::apis::scripthash_api::GetTxsByScripthashError>;
-type ElectrsAddressTxHistoryError =
-    esplora_btc_api::apis::Error<esplora_btc_api::apis::address_api::GetAddressTxHistoryError>;
+#[allow(clippy::enum_variant_names)]
+#[derive(Error, Debug)]
+pub enum KeyLoadingError {
+    #[error("IoError: {0}")]
+    IoError(#[from] IoError),
+    #[error("FromUtf8Error: {0}")]
+    FromUtf8Error(#[from] FromUtf8Error),
+    #[error("KeyError: {0}")]
+    KeyError(#[from] KeyError),
+}
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -27,8 +33,6 @@ pub enum Error {
     BitcoinError(#[from] BitcoinError),
     #[error("ConversionError: {0}")]
     ConversionError(#[from] ConversionError),
-    #[error("Error occurred in callback: {0}")]
-    CallbackError(Box<dyn std::error::Error + Send + Sync>),
     #[error("Json error: {0}")]
     SerdeJsonError(#[from] SerdeJsonError),
     #[error("Secp256k1Error: {0}")]
@@ -37,23 +41,23 @@ pub enum Error {
     KeyError(#[from] KeyError),
     #[error("Timeout: {0}")]
     TimeElapsed(#[from] Elapsed),
+    #[error(transparent)]
+    TryFromIntError(#[from] TryFromIntError),
+    #[error("LightClientError: {0}")]
+    LightClientError(#[from] BitcoinLightError),
     #[error("ElectrsError: {0}")]
-    ElectrsTxByScriptHashError(#[from] ElectrsTxByScriptHashError),
-    #[error("ElectrsError: {0}")]
-    ElectrsAddressTxHistoryError(#[from] ElectrsAddressTxHistoryError),
-    #[error("ElectrsError: {0}")]
-    ReqwestError(#[from] ReqwestError),
-    #[error("Connected to incompatable bitcoin core version: {0}")]
-    IncompatibleVersion(usize),
+    ElectrsError(#[from] ElectrsError),
+    #[error("KeyLoadingError: {0}")]
+    KeyLoadingError(#[from] KeyLoadingError),
 
+    #[error("Connected to incompatible bitcoin core version: {0}")]
+    IncompatibleVersion(usize),
     #[error("Could not confirm transaction")]
     ConfirmationError,
     #[error("Could not find block at height")]
     InvalidBitcoinHeight,
     #[error("Failed to sign transaction")]
     TransactionSigningError,
-    #[error("Failed to parse transaction")]
-    ParsingError,
     #[error("Failed to obtain public key")]
     MissingPublicKey,
     #[error("Failed to connect")]
@@ -62,8 +66,14 @@ pub enum Error {
     WalletNotFound,
     #[error("Invalid Bitcoin network")]
     InvalidBitcoinNetwork,
-    #[error("Unable to query Electrs for transaction data")]
-    ElectrsQueryFailed,
+    #[error("Transaction contains more than one return-to-self utxo")]
+    TooManyReturnToSelfAddresses,
+    #[error("ArithmeticError")]
+    ArithmeticError,
+    #[error("MissingBitcoinFeeInfo")]
+    MissingBitcoinFeeInfo,
+    #[error("FailedToConstructWalletName")]
+    FailedToConstructWalletName,
 }
 
 impl Error {
@@ -82,6 +92,26 @@ impl Error {
         matches!(self,
             Error::BitcoinError(BitcoinError::JsonRpc(JsonRpcError::Rpc(err)))
                 if BitcoinRpcError::from(err.clone()) == BitcoinRpcError::RpcWalletError
+        )
+    }
+
+    pub fn rejected_by_network_rules(&self) -> bool {
+        matches!(self,
+            Error::BitcoinError(BitcoinError::JsonRpc(JsonRpcError::Rpc(err)))
+                if BitcoinRpcError::from(err.clone()) == BitcoinRpcError::RpcVerifyRejected
+        )
+    }
+
+    /// Naming is intentionally somewhat unusual: RpcWalletError can also have other causes.
+    pub fn could_be_insufficient_funds(&self) -> bool {
+        // Regtest on bitcoind 0.22 gives "-4: insufficient funds", where -4 is RpcWalletError.
+        // We additionally filter for RpcWalletInsufficientFunds because the name suggests
+        // (and bitcoin source confirms) that some calls/versions will throw this error instead.
+        // See e.g. https://github.com/bitcoin/bitcoin/blob/bd616bc16a3a7f70f60ca5034b5a91e5ac89ac9d/test/functional/interface_usdt_coinselection.py#L188
+        matches!(self,
+            Error::BitcoinError(BitcoinError::JsonRpc(JsonRpcError::Rpc(err)))
+                if BitcoinRpcError::from(err.clone()) == BitcoinRpcError::RpcWalletError ||
+                BitcoinRpcError::from(err.clone()) == BitcoinRpcError::RpcWalletInsufficientFunds
         )
     }
 

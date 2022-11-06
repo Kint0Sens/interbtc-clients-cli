@@ -1,5 +1,4 @@
 use crate::{
-    collateral::lock_required_collateral,
     delay::{OrderedVaultsDelay, RandomDelay, ZeroDelay},
     error::Error,
     faucet, issue,
@@ -9,7 +8,7 @@ use crate::{
     Event, IssueRequests, CHAIN_HEIGHT_POLLING_INTERVAL,
 };
 use async_trait::async_trait;
-use bitcoin::{BitcoinCore, BitcoinCoreApi, Error as BitcoinError};
+use bitcoin::{Error as BitcoinError, Network, PublicKey};
 use clap::Parser;
 use futures::{
     channel::{mpsc, mpsc::Sender},
@@ -20,10 +19,10 @@ use git_version::git_version;
 use runtime::{
     cli::{parse_duration_minutes, parse_duration_ms},
     BtcRelayPallet, CollateralBalancesPallet, CurrencyId, Error as RuntimeError, InterBtcParachain, PrettyPrint,
-    RegisterVaultEvent, StoreMainChainHeaderEvent, UpdateActiveBlockEvent, UtilFuncs, VaultCurrencyPair, VaultId,
-    VaultRegistryPallet,
+    RegisterVaultEvent, StoreMainChainHeaderEvent, TryFromSymbol, UpdateActiveBlockEvent, UtilFuncs, VaultCurrencyPair,
+    VaultId, VaultRegistryPallet,
 };
-use service::{wait_or_shutdown, Error as ServiceError, MonitoringConfig, Service, ShutdownSender};
+use service::{wait_or_shutdown, DynBitcoinCoreApi, Error as ServiceError, MonitoringConfig, Service, ShutdownSender};
 use std::{collections::HashMap, pin::Pin, sync::Arc, time::Duration};
 use tokio::{sync::RwLock, time::sleep};
 
@@ -55,7 +54,7 @@ fn parse_collateral_and_amount(
 #[derive(Parser, Clone, Debug)]
 pub struct VaultServiceConfig {
     /// Automatically register the vault with the given amount of collateral and a newly generated address.
-    #[clap(long, parse(try_from_str = parse_collateral_and_amount))]
+    #[clap(long, value_parser = parse_collateral_and_amount)]
     pub auto_register: Vec<(String, Option<u128>)>,
 
     /// Pass the faucet URL for auto-registration.
@@ -79,7 +78,7 @@ pub struct VaultServiceConfig {
     pub no_random_delay: bool,
 
     /// Timeout in milliseconds to repeat collateralization checks.
-    #[clap(long, parse(try_from_str = parse_duration_ms), default_value = "5000")]
+    #[clap(long, value_parser = parse_duration_ms, default_value = "5000")]
     pub collateral_timeout_ms: Duration,
 
     /// How many bitcoin confirmations to wait for. If not specified, the
@@ -88,11 +87,11 @@ pub struct VaultServiceConfig {
     pub btc_confirmations: Option<u32>,
 
     /// Minimum time to the the redeem/replace execution deadline to make the bitcoin payment.
-    #[clap(long, parse(try_from_str = parse_duration_minutes), default_value = "120")]
+    #[clap(long, value_parser = parse_duration_minutes, default_value = "120")]
     pub payment_margin_minutes: Duration,
 
     /// Timeout in milliseconds to poll Bitcoin.
-    #[clap(long, parse(try_from_str = parse_duration_ms), default_value = "6000")]
+    #[clap(long, value_parser = parse_duration_ms, default_value = "6000")]
     pub bitcoin_poll_interval_ms: Duration,
 
     /// Starting height to relay block headers, if not defined
@@ -112,9 +111,14 @@ pub struct VaultServiceConfig {
     #[clap(long)]
     pub no_bitcoin_block_relay: bool,
 
-    /// Don't refund overpayments.
+    /// Deprecated - kept only to not break clients.
     #[clap(long)]
     pub no_auto_refund: bool,
+
+    /// Bump bitcoin tx fees whenever the oracle reports a new,
+    /// higher inclusion fee estimate.
+    #[clap(long)]
+    pub auto_rbf: bool,
 }
 
 async fn active_block_listener(
@@ -156,27 +160,27 @@ async fn relay_block_listener(
 }
 
 #[derive(Clone)]
-pub struct VaultData<BCA: BitcoinCoreApi + Clone + Send + Sync + 'static> {
+pub struct VaultData {
     pub vault_id: VaultId,
-    pub btc_rpc: BCA,
+    pub btc_rpc: DynBitcoinCoreApi,
     pub metrics: PerCurrencyMetrics,
 }
 
 #[derive(Clone)]
-pub struct VaultIdManager<BCA: BitcoinCoreApi + Clone + Send + Sync + 'static> {
-    vault_data: Arc<RwLock<HashMap<VaultId, VaultData<BCA>>>>,
+pub struct VaultIdManager {
+    vault_data: Arc<RwLock<HashMap<VaultId, VaultData>>>,
     btc_parachain: InterBtcParachain,
-    btc_rpc_master_wallet: BCA,
+    btc_rpc_master_wallet: DynBitcoinCoreApi,
     // TODO: refactor this
     #[allow(clippy::type_complexity)]
-    constructor: Arc<Box<dyn Fn(VaultId) -> Result<BCA, BitcoinError> + Send + Sync>>,
+    constructor: Arc<Box<dyn Fn(VaultId) -> Result<DynBitcoinCoreApi, BitcoinError> + Send + Sync>>,
 }
 
-impl<BCA: BitcoinCoreApi + Clone + Send + Sync + 'static> VaultIdManager<BCA> {
+impl VaultIdManager {
     pub fn new(
         btc_parachain: InterBtcParachain,
-        btc_rpc_master_wallet: BCA,
-        constructor: impl Fn(VaultId) -> Result<BCA, BitcoinError> + Send + Sync + 'static,
+        btc_rpc_master_wallet: DynBitcoinCoreApi,
+        constructor: impl Fn(VaultId) -> Result<DynBitcoinCoreApi, BitcoinError> + Send + Sync + 'static,
     ) -> Self {
         Self {
             vault_data: Arc::new(RwLock::new(HashMap::new())),
@@ -187,7 +191,11 @@ impl<BCA: BitcoinCoreApi + Clone + Send + Sync + 'static> VaultIdManager<BCA> {
     }
 
     // used for testing only
-    pub fn from_map(btc_parachain: InterBtcParachain, btc_rpc_master_wallet: BCA, map: HashMap<VaultId, BCA>) -> Self {
+    pub fn from_map(
+        btc_parachain: InterBtcParachain,
+        btc_rpc_master_wallet: DynBitcoinCoreApi,
+        map: HashMap<VaultId, DynBitcoinCoreApi>,
+    ) -> Self {
         let vault_data = map
             .into_iter()
             .map(|(key, value)| {
@@ -223,17 +231,18 @@ impl<BCA: BitcoinCoreApi + Clone + Send + Sync + 'static> VaultIdManager<BCA> {
             .btc_parachain
             .get_public_key()
             .await?
-            .ok_or(bitcoin::Error::MissingPublicKey)?;
+            .ok_or(BitcoinError::MissingPublicKey)?;
 
         // migration to the new shared public key setup: copy the public key from the
         // currency-specific wallet to the master wallet. This can be removed once all
         // vaults have migrated
-        if let Ok(private_key) = btc_rpc.dump_derivation_key(derivation_key.0) {
+        let public_key = PublicKey::from_slice(&derivation_key.0).map_err(BitcoinError::KeyError)?;
+        if let Ok(private_key) = btc_rpc.dump_derivation_key(&public_key) {
             self.btc_rpc_master_wallet.import_derivation_key(&private_key)?;
         }
 
         // Copy the derivation key from the master wallet to use currency-specific wallet
-        match self.btc_rpc_master_wallet.dump_derivation_key(derivation_key.0) {
+        match self.btc_rpc_master_wallet.dump_derivation_key(&public_key) {
             Ok(private_key) => {
                 btc_rpc.import_derivation_key(&private_key)?;
             }
@@ -260,7 +269,7 @@ impl<BCA: BitcoinCoreApi + Clone + Send + Sync + 'static> VaultIdManager<BCA> {
         Ok(())
     }
 
-    pub async fn fetch_vault_ids(&self, startup_collateral_increase: bool) -> Result<(), Error> {
+    pub async fn fetch_vault_ids(&self) -> Result<(), Error> {
         for vault_id in self
             .btc_parachain
             .get_vaults_by_account_id(self.btc_parachain.get_account_id())
@@ -279,15 +288,6 @@ impl<BCA: BitcoinCoreApi + Clone + Send + Sync + 'static> VaultIdManager<BCA> {
                 Err(x) => {
                     return Err(x);
                 }
-            }
-
-            if startup_collateral_increase {
-                // check if the vault is registered
-                match lock_required_collateral(self.btc_parachain.clone(), vault_id).await {
-                    Err(Error::RuntimeError(runtime::Error::VaultNotFound)) => {} // not registered
-                    Err(e) => tracing::error!("Failed to lock required additional collateral: {}", e),
-                    _ => {} // collateral level now OK
-                };
             }
         }
         Ok(())
@@ -309,15 +309,15 @@ impl<BCA: BitcoinCoreApi + Clone + Send + Sync + 'static> VaultIdManager<BCA> {
             .await?)
     }
 
-    pub async fn get_bitcoin_rpc(&self, vault_id: &VaultId) -> Option<BCA> {
+    pub async fn get_bitcoin_rpc(&self, vault_id: &VaultId) -> Option<DynBitcoinCoreApi> {
         self.vault_data.read().await.get(vault_id).map(|x| x.btc_rpc.clone())
     }
 
-    pub async fn get_vault(&self, vault_id: &VaultId) -> Option<VaultData<BCA>> {
+    pub async fn get_vault(&self, vault_id: &VaultId) -> Option<VaultData> {
         self.vault_data.read().await.get(vault_id).cloned()
     }
 
-    pub async fn get_entries(&self) -> Vec<VaultData<BCA>> {
+    pub async fn get_entries(&self) -> Vec<VaultData> {
         self.vault_data
             .read()
             .await
@@ -335,7 +335,7 @@ impl<BCA: BitcoinCoreApi + Clone + Send + Sync + 'static> VaultIdManager<BCA> {
             .collect()
     }
 
-    pub async fn get_vault_btc_rpcs(&self) -> Vec<(VaultId, BCA)> {
+    pub async fn get_vault_btc_rpcs(&self) -> Vec<(VaultId, DynBitcoinCoreApi)> {
         self.vault_data
             .read()
             .await
@@ -347,11 +347,11 @@ impl<BCA: BitcoinCoreApi + Clone + Send + Sync + 'static> VaultIdManager<BCA> {
 
 pub struct VaultService {
     btc_parachain: InterBtcParachain,
-    btc_rpc_master_wallet: BitcoinCore,
+    btc_rpc_master_wallet: DynBitcoinCoreApi,
     config: VaultServiceConfig,
     monitoring_config: MonitoringConfig,
     shutdown: ShutdownSender,
-    vault_id_manager: VaultIdManager<BitcoinCore>,
+    vault_id_manager: VaultIdManager,
 }
 
 #[async_trait]
@@ -361,11 +361,11 @@ impl Service<VaultServiceConfig> for VaultService {
 
     fn new_service(
         btc_parachain: InterBtcParachain,
-        btc_rpc_master_wallet: BitcoinCore,
+        btc_rpc_master_wallet: DynBitcoinCoreApi,
         config: VaultServiceConfig,
         monitoring_config: MonitoringConfig,
         shutdown: ShutdownSender,
-        constructor: Box<dyn Fn(VaultId) -> Result<BitcoinCore, BitcoinError> + Send + Sync>,
+        constructor: Box<dyn Fn(VaultId) -> Result<DynBitcoinCoreApi, BitcoinError> + Send + Sync>,
     ) -> Self {
         VaultService::new(
             btc_parachain,
@@ -382,12 +382,16 @@ impl Service<VaultServiceConfig> for VaultService {
             Ok(_) => Ok(()),
             Err(Error::RuntimeError(err)) => Err(ServiceError::RuntimeError(err)),
             Err(Error::BitcoinError(err)) => Err(ServiceError::BitcoinError(err)),
+            Err(Error::ServiceError(err)) => Err(err),
             Err(err) => Err(ServiceError::Other(err.to_string())),
         }
     }
 }
 
-async fn run_and_monitor_tasks(shutdown_tx: ShutdownSender, items: Vec<(&str, ServiceTask)>) {
+async fn run_and_monitor_tasks(
+    shutdown_tx: ShutdownSender,
+    items: Vec<(&str, ServiceTask)>,
+) -> Result<(), ServiceError> {
     let (metrics_iterators, tasks): (HashMap<String, _>, Vec<_>) = items
         .into_iter()
         .filter_map(|(name, task)| {
@@ -410,7 +414,14 @@ async fn run_and_monitor_tasks(shutdown_tx: ShutdownSender, items: Vec<(&str, Se
         publish_tokio_metrics(metrics_iterators),
     ));
 
-    let _ = join(tokio_metrics, join_all(tasks)).await;
+    match join(tokio_metrics, join_all(tasks)).await {
+        (Ok(Err(err)), _) => Err(err),
+        (_, results) => results
+            .into_iter()
+            .find(|res| matches!(res, Ok(Err(_))))
+            .and_then(|res| res.ok())
+            .unwrap_or(Ok(())),
+    }
 }
 
 type Task = Pin<Box<dyn Future<Output = Result<(), service::Error>> + Send + 'static>>;
@@ -438,11 +449,11 @@ where
 impl VaultService {
     fn new(
         btc_parachain: InterBtcParachain,
-        btc_rpc_master_wallet: BitcoinCore,
+        btc_rpc_master_wallet: DynBitcoinCoreApi,
         config: VaultServiceConfig,
         monitoring_config: MonitoringConfig,
         shutdown: ShutdownSender,
-        constructor: impl Fn(VaultId) -> Result<BitcoinCore, BitcoinError> + Send + Sync + 'static,
+        constructor: impl Fn(VaultId) -> Result<DynBitcoinCoreApi, BitcoinError> + Send + Sync + 'static,
     ) -> Self {
         Self {
             btc_parachain: btc_parachain.clone(),
@@ -468,7 +479,12 @@ impl VaultService {
     }
 
     async fn validate_bitcoin_network(&self) -> Result<(), Error> {
-        let bitcoin_network = self.btc_rpc_master_wallet.network().to_string();
+        let bitcoin_network = match self.btc_rpc_master_wallet.network() {
+            Network::Bitcoin => "mainnet",
+            Network::Testnet => "testnet",
+            Network::Regtest => "regtest",
+            Network::Signet => "signet",
+        };
         let system_properties = self.btc_parachain.get_rpc_properties().await.unwrap_or_default();
 
         if let Some(parachain_bitcoin_network) = system_properties.get("bitcoinNetwork") {
@@ -477,10 +493,12 @@ impl VaultService {
             // source: https://github.com/interlay/interbtc/blob/a71b970616b0a4a59cd2e709a606a9a78fce80ff/primitives/src/lib.rs#L23
             // `bitcoin_network` can be `mainnet`, `testnet`, regtest.
             // source: https://developer.bitcoin.org/reference/rpc/getblockchaininfo.html
-            if !parachain_bitcoin_network_string.contains(&bitcoin_network) {
-                return Err(
-                    runtime::Error::BitcoinNetworkMismatch(parachain_bitcoin_network_string, bitcoin_network).into(),
-                );
+            if !parachain_bitcoin_network_string.contains(bitcoin_network) {
+                return Err(runtime::Error::BitcoinNetworkMismatch(
+                    parachain_bitcoin_network_string,
+                    bitcoin_network.to_string(),
+                )
+                .into());
             }
         }
 
@@ -492,12 +510,14 @@ impl VaultService {
 
         let account_id = self.btc_parachain.get_account_id().clone();
 
-        let parsed_auto_register = join_all(self.config.auto_register.iter().map(|(symbol, amount)| async move {
-            Ok((self.btc_parachain.parse_currency_id(symbol.to_string()).await?, amount))
-        }))
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, Error>>()?;
+        let parsed_auto_register = self
+            .config
+            .auto_register
+            .clone()
+            .into_iter()
+            .map(|(symbol, amount)| Ok((CurrencyId::try_from_symbol(symbol)?, amount)))
+            .into_iter()
+            .collect::<Result<Vec<_>, Error>>()?;
 
         // exit if auto-register uses faucet and faucet url not set
         if parsed_auto_register.iter().any(|(_, o)| o.is_none()) && self.config.faucet_url.is_none() {
@@ -529,10 +549,12 @@ impl VaultService {
                 .iter()
                 .map(|(currency_id, amount)| self.maybe_register_vault(currency_id, amount)),
         )
-        .await;
+        .await
+        .into_iter()
+        .collect::<Result<_, Error>>()?;
 
         // purposefully _after_ maybe_register_vault and _before_ other calls
-        self.vault_id_manager.fetch_vault_ids(false).await?;
+        self.vault_id_manager.fetch_vault_ids().await?;
 
         let startup_height = self.await_parachain_block().await?;
 
@@ -543,7 +565,7 @@ impl VaultService {
             self.btc_rpc_master_wallet.clone(),
             num_confirmations,
             self.config.payment_margin_minutes,
-            !self.config.no_auto_refund,
+            self.config.auto_rbf,
         );
         tokio::spawn(async move {
             tracing::info!("Checking for open requests...");
@@ -571,7 +593,22 @@ impl VaultService {
         let (issue_event_tx, issue_event_rx) = mpsc::channel::<Event>(32);
         let (replace_event_tx, replace_event_rx) = mpsc::channel::<Event>(16);
 
+        let listen_for_registered_assets =
+            |rpc: InterBtcParachain| async move { rpc.listen_for_registered_assets().await };
+
+        let listen_for_fee_rate_estimate_changes =
+            |rpc: InterBtcParachain| async move { rpc.listen_for_fee_rate_changes().await };
+
+        tracing::info!("Starting all services...");
         let tasks = vec![
+            (
+                "Registered Asset Listener",
+                run(listen_for_registered_assets(self.btc_parachain.clone())),
+            ),
+            (
+                "Fee Estimate Listener",
+                run(listen_for_fee_rate_estimate_changes(self.btc_parachain.clone())),
+            ),
             (
                 "Issue Request Listener",
                 run(listen_for_issue_requests(
@@ -620,6 +657,7 @@ impl VaultService {
                     self.vault_id_manager.clone(),
                     num_confirmations,
                     self.config.payment_margin_minutes,
+                    self.config.auto_rbf,
                 )),
             ),
             (
@@ -663,16 +701,7 @@ impl VaultService {
                     self.vault_id_manager.clone(),
                     num_confirmations,
                     self.config.payment_margin_minutes,
-                )),
-            ),
-            (
-                "Refund Request Listener",
-                run(listen_for_refund_requests(
-                    self.shutdown.clone(),
-                    self.btc_parachain.clone(),
-                    self.vault_id_manager.clone(),
-                    num_confirmations,
-                    !self.config.no_auto_refund,
+                    self.config.auto_rbf,
                 )),
             ),
             (
@@ -734,9 +763,9 @@ impl VaultService {
             ),
         ];
 
-        run_and_monitor_tasks(self.shutdown.clone(), tasks).await;
-
-        Ok(())
+        run_and_monitor_tasks(self.shutdown.clone(), tasks)
+            .await
+            .map_err(Error::ServiceError)
     }
 
     async fn maybe_register_public_key(&self) -> Result<(), Error> {
@@ -747,8 +776,10 @@ impl VaultService {
 
         if self.btc_parachain.get_public_key().await?.is_none() {
             tracing::info!("Registering bitcoin public key to the parachain...");
-            let new_key = self.btc_rpc_master_wallet.get_new_public_key().await?;
-            self.btc_parachain.register_public_key(new_key).await?;
+            let public_key = self.btc_rpc_master_wallet.get_new_public_key().await?;
+            self.btc_parachain
+                .register_public_key(public_key.inner.serialize().into())
+                .await?;
         }
 
         Ok(())

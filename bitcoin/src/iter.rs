@@ -1,13 +1,14 @@
 use crate::{BitcoinCoreApi, BitcoinRpcError, Error};
 use bitcoincore_rpc::{
     bitcoin::{Block, BlockHash, Transaction},
-    json::GetBlockResult,
     jsonrpc::Error as JsonRpcError,
     Error as BitcoinError,
 };
 use futures::{prelude::*, stream::StreamExt};
 use log::trace;
-use std::iter;
+use std::{iter, sync::Arc};
+
+type DynBitcoinCoreApi = Arc<dyn BitcoinCoreApi + Send + Sync>;
 
 /// Stream over transactions, starting with this in the mempool and continuing with
 /// transactions from previous in-chain block. The stream ends after the block at
@@ -17,8 +18,8 @@ use std::iter;
 ///
 /// * `rpc` - bitcoin rpc
 /// * `stop_height` - height of the last block the iterator will return transactions from
-pub async fn reverse_stream_transactions<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
-    rpc: &B,
+pub async fn reverse_stream_transactions(
+    rpc: &DynBitcoinCoreApi,
     stop_height: u32,
 ) -> Result<impl Stream<Item = Result<Transaction, Error>> + Unpin + '_, Error> {
     let mempool_transactions = stream::iter(rpc.get_mempool_transactions().await?);
@@ -34,8 +35,8 @@ pub async fn reverse_stream_transactions<B: BitcoinCoreApi + Clone + Send + Sync
 /// * `stop_height` - height of the last block the iterator will return transactions from
 /// * `stop_at_pruned` - whether to gracefully stop if a pruned blockchain is encountered;
 /// otherwise, will throw an error
-pub async fn reverse_stream_in_chain_transactions<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
-    rpc: &B,
+pub async fn reverse_stream_in_chain_transactions(
+    rpc: &DynBitcoinCoreApi,
     stop_height: u32,
 ) -> impl Stream<Item = Result<Transaction, Error>> + Send + Unpin + '_ {
     reverse_stream_blocks(rpc, stop_height).await.flat_map(|block| {
@@ -61,8 +62,8 @@ pub async fn reverse_stream_in_chain_transactions<B: BitcoinCoreApi + Clone + Se
 /// * `stop_height` - height of the last block the stream will return
 /// * `stop_at_pruned` - whether to gracefully stop if a pruned blockchain is encountered;
 /// otherwise, will throw an error
-pub async fn reverse_stream_blocks<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
-    rpc: &B,
+pub async fn reverse_stream_blocks(
+    rpc: &DynBitcoinCoreApi,
     stop_height: u32,
 ) -> impl Stream<Item = Result<Block, Error>> + Unpin + '_ {
     struct StreamState<B> {
@@ -85,7 +86,7 @@ pub async fn reverse_stream_blocks<B: BitcoinCoreApi + Clone + Send + Sync + 'st
             let (next_height, next_hash) = match (&state.height, &state.prev_block) {
                 (Some(height), Some(block)) => (height.saturating_sub(1), block.header.prev_blockhash),
                 _ => match get_best_block_info(state.rpc).await {
-                    Ok(info) => (info.height as u32, info.hash),
+                    Ok((height, hash)) => (height, hash),
                     Err(e) => return Some((Err(e), state)), // abort
                 },
             };
@@ -120,8 +121,8 @@ pub async fn reverse_stream_blocks<B: BitcoinCoreApi + Clone + Send + Sync + 'st
 /// * `rpc` - bitcoin rpc
 /// * `from_height` - height of the first block of the stream
 /// * `num_confirmations` - minimum for a block to be accepted
-pub async fn stream_in_chain_transactions<B: BitcoinCoreApi + Clone>(
-    rpc: B,
+pub async fn stream_in_chain_transactions(
+    rpc: DynBitcoinCoreApi,
     from_height: u32,
     num_confirmations: u32,
 ) -> impl Stream<Item = Result<(BlockHash, Transaction), Error>> + Unpin {
@@ -148,8 +149,8 @@ pub async fn stream_in_chain_transactions<B: BitcoinCoreApi + Clone>(
 /// * `rpc` - bitcoin rpc
 /// * `from_height` - height of the first block of the stream
 /// * `num_confirmations` - minimum for a block to be accepted
-pub async fn stream_blocks<B: BitcoinCoreApi + Clone>(
-    rpc: B,
+pub async fn stream_blocks(
+    rpc: DynBitcoinCoreApi,
     from_height: u32,
     num_confirmations: u32,
 ) -> impl Stream<Item = Result<Block, Error>> + Unpin {
@@ -182,16 +183,18 @@ pub async fn stream_blocks<B: BitcoinCoreApi + Clone>(
 
 /// small helper function for getting the block info of the best block. This simplifies
 /// error handling a little bit
-async fn get_best_block_info<B: BitcoinCoreApi + Clone>(rpc: &B) -> Result<GetBlockResult, Error> {
-    let hash = rpc.get_best_block_hash().await?;
-    rpc.get_block_info(&hash).await
+async fn get_best_block_info(rpc: &DynBitcoinCoreApi) -> Result<(u32, BlockHash), Error> {
+    let height = rpc.get_block_count().await? as u32;
+    let hash = rpc.get_block_hash(height).await?;
+    Ok((height, hash))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::*;
-    pub use bitcoincore_rpc::bitcoin::{Amount, Network, TxMerkleNode};
+    use bitcoincore_rpc::bitcoin::PackedLockTime;
+    pub use bitcoincore_rpc::bitcoin::{Address, Amount, Network, PublicKey, TxMerkleNode};
     use sp_core::H256;
 
     mockall::mock! {
@@ -208,21 +211,19 @@ mod tests {
             async fn get_transaction(&self, txid: &Txid, block_hash: Option<BlockHash>) -> Result<Transaction, Error>;
             async fn get_proof(&self, txid: Txid, block_hash: &BlockHash) -> Result<Vec<u8>, Error>;
             async fn get_block_hash(&self, height: u32) -> Result<BlockHash, Error>;
-            async fn is_block_known(&self, block_hash: BlockHash) -> Result<bool, Error>;
-            async fn get_new_address<A: PartialAddress + Send + 'static>(&self) -> Result<A, Error>;
-            async fn get_new_public_key<P: From<[u8; PUBLIC_KEY_SIZE]> + 'static>(&self) -> Result<P, Error>;
-            fn dump_derivation_key<P: Into<[u8; PUBLIC_KEY_SIZE]> + Send + Sync + 'static>(&self, public_key: P) -> Result<PrivateKey, Error>;
+            async fn get_new_address(&self) -> Result<Address, Error>;
+            async fn get_new_public_key(&self) -> Result<PublicKey, Error>;
+            fn dump_derivation_key(&self, public_key: &PublicKey) -> Result<PrivateKey, Error>;
             fn import_derivation_key(&self, private_key: &PrivateKey) -> Result<(), Error>;
-            async fn add_new_deposit_key<P: Into<[u8; PUBLIC_KEY_SIZE]> + Send + Sync + 'static>(
+            async fn add_new_deposit_key(
                 &self,
-                public_key: P,
+                public_key: PublicKey,
                 secret_key: Vec<u8>,
             ) -> Result<(), Error>;
             async fn get_best_block_hash(&self) -> Result<BlockHash, Error>;
             async fn get_pruned_height(&self) -> Result<u64, Error>;
             async fn get_block(&self, hash: &BlockHash) -> Result<Block, Error>;
             async fn get_block_header(&self, hash: &BlockHash) -> Result<BlockHeader, Error>;
-            async fn get_block_info(&self, hash: &BlockHash) -> Result<GetBlockResult, Error>;
             async fn get_mempool_transactions<'a>(
                 &'a self,
             ) -> Result<Box<dyn Iterator<Item = Result<Transaction, Error>> + Send + 'a>, Error>;
@@ -231,41 +232,36 @@ mod tests {
                 txid: Txid,
                 num_confirmations: u32,
             ) -> Result<TransactionMetadata, Error>;
-            async fn create_transaction<A: PartialAddress + Send + Sync + 'static>(
+            async fn create_and_send_transaction(
                 &self,
-                address: A,
+                address: Address,
                 sat: u64,
-                fee_rate: u64,
-                request_id: Option<H256>,
-            ) -> Result<LockedTransaction, Error>;
-            async fn send_transaction(&self, transaction: LockedTransaction) -> Result<Txid, Error>;
-            async fn create_and_send_transaction<A: PartialAddress + Send + 'static>(
-                &self,
-                address: A,
-                sat: u64,
-                fee_rate: u64,
+                fee_rate: SatPerVbyte,
                 request_id: Option<H256>,
             ) -> Result<Txid, Error>;
-            async fn send_to_address<A: PartialAddress + Send + Sync + 'static>(
+            async fn send_to_address(
                 &self,
-                address: A,
+                address: Address,
                 sat: u64,
                 request_id: Option<H256>,
-                fee_rate: u64,
+                fee_rate: SatPerVbyte,
                 num_confirmations: u32,
             ) -> Result<TransactionMetadata, Error>;
             async fn create_or_load_wallet(&self) -> Result<(), Error>;
-            async fn wallet_has_public_key<P>(&self, public_key: P) -> Result<bool, Error>
-                where
-                    P: Into<[u8; PUBLIC_KEY_SIZE]> + From<[u8; PUBLIC_KEY_SIZE]> + Clone + PartialEq + Send + Sync + 'static;
-            async fn import_private_key(&self, privkey: PrivateKey) -> Result<(), Error>;
             async fn rescan_blockchain(&self, start_height: usize, end_height: usize) -> Result<(), Error>;
-            async fn rescan_electrs_for_addresses<A: PartialAddress + Send + Sync + 'static>(
+            async fn rescan_electrs_for_addresses(
                 &self,
-                addresses: Vec<A>,
+                addresses: Vec<Address>,
             ) -> Result<(), Error>;
-            async fn find_duplicate_payments(&self, transaction: &Transaction) -> Result<Vec<(Txid, BlockHash)>, Error>;
             fn get_utxo_count(&self) -> Result<usize, Error>;
+            async fn bump_fee(
+                &self,
+                txid: &Txid,
+                address: Address,
+                fee_rate: SatPerVbyte,
+            ) -> Result<Txid, Error>;
+            async fn is_in_mempool(&self, txid: Txid) -> Result<bool, Error>;
+            async fn fee_rate(&self, txid: Txid) -> Result<SatPerVbyte, Error>;
         }
     }
 
@@ -276,30 +272,6 @@ mod tests {
         }
     }
 
-    fn dummy_block_info(height: usize, hash: BlockHash) -> GetBlockResult {
-        GetBlockResult {
-            height,
-            hash,
-            confirmations: Default::default(),
-            size: Default::default(),
-            strippedsize: Default::default(),
-            weight: Default::default(),
-            version: Default::default(),
-            version_hex: Default::default(),
-            merkleroot: Default::default(),
-            tx: Default::default(),
-            time: Default::default(),
-            mediantime: Default::default(),
-            nonce: Default::default(),
-            bits: Default::default(),
-            difficulty: Default::default(),
-            chainwork: Default::default(),
-            n_tx: Default::default(),
-            previousblockhash: Default::default(),
-            nextblockhash: Default::default(),
-        }
-    }
-
     fn dummy_hash(value: u8) -> BlockHash {
         BlockHash::from_slice(&[value; 32]).unwrap()
     }
@@ -307,7 +279,7 @@ mod tests {
     fn dummy_tx(value: i32) -> Transaction {
         Transaction {
             version: value,
-            lock_time: 1,
+            lock_time: PackedLockTime(1),
             input: vec![],
             output: vec![],
         }
@@ -322,7 +294,7 @@ mod tests {
                 nonce: 0,
                 time: 0,
                 prev_blockhash: next_hash,
-                merkle_root: TxMerkleNode::default(),
+                merkle_root: TxMerkleNode::all_zeros(),
             },
         }
     }
@@ -347,14 +319,13 @@ mod tests {
             .withf(|&x| x == dummy_hash(2))
             .times(1)
             .returning(|_| Ok(dummy_block(vec![3, 4, 5], dummy_hash(3))));
-
-        // block info: the head of the btc we give a height of 22
+        bitcoin.expect_get_block_count().times(1).returning(|| Ok(21));
         bitcoin
-            .expect_get_block_info()
+            .expect_get_block_hash()
             .times(1)
-            .returning(|&hash| Ok(dummy_block_info(21, hash)));
+            .returning(|_| Ok(dummy_hash(1)));
 
-        let btc_rpc = bitcoin;
+        let btc_rpc: DynBitcoinCoreApi = Arc::new(bitcoin);
         let mut iter = reverse_stream_transactions(&btc_rpc, 20).await.unwrap();
 
         assert_eq!(iter.next().await.unwrap().unwrap().version, 0);
@@ -395,14 +366,13 @@ mod tests {
             .withf(|&x| x == dummy_hash(4))
             .times(1)
             .returning(|_| Ok(dummy_block(vec![], dummy_hash(5))));
-
+        bitcoin.expect_get_block_count().times(1).returning(|| Ok(23));
         bitcoin
-            .expect_get_block_info()
+            .expect_get_block_hash()
             .times(1)
-            .returning(|&hash| Ok(dummy_block_info(23, hash)));
+            .returning(|_| Ok(dummy_hash(1)));
 
-        let btc_rpc = bitcoin;
-
+        let btc_rpc: DynBitcoinCoreApi = Arc::new(bitcoin);
         let mut iter = reverse_stream_transactions(&btc_rpc, 20).await.unwrap();
 
         assert_eq!(iter.next().await.unwrap().unwrap().version, 1);
@@ -420,13 +390,13 @@ mod tests {
             .times(1)
             .returning(|| Ok(Box::new(vec![].into_iter())));
         bitcoin.expect_get_best_block_hash().returning(|| Ok(dummy_hash(1)));
+        bitcoin.expect_get_block_count().times(1).returning(|| Ok(20));
         bitcoin
-            .expect_get_block_info()
+            .expect_get_block_hash()
             .times(1)
-            .returning(|&hash| Ok(dummy_block_info(20, hash)));
+            .returning(|_| Ok(dummy_hash(1)));
 
-        let btc_rpc = bitcoin;
-
+        let btc_rpc: DynBitcoinCoreApi = Arc::new(bitcoin);
         let mut iter = reverse_stream_transactions(&btc_rpc, 21).await.unwrap();
 
         assert!(iter.next().await.is_none());
@@ -440,13 +410,13 @@ mod tests {
             .times(1)
             .returning(|| Ok(Box::new(vec![Ok(dummy_tx(1)), Ok(dummy_tx(2))].into_iter())));
         bitcoin.expect_get_best_block_hash().returning(|| Ok(dummy_hash(1)));
+        bitcoin.expect_get_block_count().times(1).returning(|| Ok(20));
         bitcoin
-            .expect_get_block_info()
+            .expect_get_block_hash()
             .times(1)
-            .returning(|&hash| Ok(dummy_block_info(20, hash)));
+            .returning(|_| Ok(dummy_hash(1)));
 
-        let btc_rpc = bitcoin;
-
+        let btc_rpc: DynBitcoinCoreApi = Arc::new(bitcoin);
         let mut iter = reverse_stream_transactions(&btc_rpc, 21).await.unwrap();
 
         assert_eq!(iter.next().await.unwrap().unwrap().version, 1);
@@ -467,13 +437,13 @@ mod tests {
             .withf(|&x| x == dummy_hash(1))
             .times(1)
             .returning(|_| Ok(dummy_block(vec![1], dummy_hash(2))));
+        bitcoin.expect_get_block_count().times(1).returning(|| Ok(20));
         bitcoin
-            .expect_get_block_info()
+            .expect_get_block_hash()
             .times(1)
-            .returning(|&hash| Ok(dummy_block_info(20, hash)));
+            .returning(|_| Ok(dummy_hash(1)));
 
-        let btc_rpc = bitcoin;
-
+        let btc_rpc: DynBitcoinCoreApi = Arc::new(bitcoin);
         let mut iter = reverse_stream_transactions(&btc_rpc, 20).await.unwrap();
 
         assert_eq!(iter.next().await.unwrap().unwrap().version, 1);

@@ -4,15 +4,15 @@ mod bitcoin_simulator;
 
 use crate::{
     rpc::{IssuePallet, OraclePallet, SudoPallet, VaultRegistryPallet},
-    CurrencyId, FixedU128, H256Le, InterBtcParachain, InterBtcSigner, OracleKey, VaultId,
+    CurrencyId, FixedU128, H256Le, InterBtcParachain, InterBtcSigner, OracleKey, PartialAddress, VaultId,
 };
-use bitcoin::{BitcoinCoreApi, BlockHash, Txid};
+use bitcoin::{BitcoinCoreApi, BlockHash, SatPerVbyte, Txid};
 use frame_support::assert_ok;
 use futures::{
     future::{try_join, Either},
     pin_mut, Future, FutureExt, SinkExt, StreamExt,
 };
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use subxt::Event;
 use subxt_client::{
     AccountKeyring, DatabaseSource, KeystoreConfig, Role, SubxtClientConfig, WasmExecutionMethod,
@@ -20,6 +20,8 @@ use subxt_client::{
 };
 use tempdir::TempDir;
 use tokio::time::{sleep, timeout};
+
+type DynBitcoinCoreApi = Arc<dyn BitcoinCoreApi + Send + Sync>;
 
 pub use subxt_client::SubxtClient;
 
@@ -109,17 +111,17 @@ pub async fn setup_provider(client: SubxtClient, key: AccountKeyring) -> InterBt
 /// request, pay and execute an issue
 pub async fn assert_issue(
     parachain_rpc: &InterBtcParachain,
-    btc_rpc: &MockBitcoinCore,
+    btc_rpc: &DynBitcoinCoreApi,
     vault_id: &VaultId,
     amount: u128,
 ) {
     let issue = parachain_rpc.request_issue(amount, vault_id).await.unwrap();
 
-    let fee_rate = 1000;
+    let fee_rate = SatPerVbyte(1000);
 
     let metadata = btc_rpc
         .send_to_address(
-            issue.vault_address,
+            issue.vault_address.to_address(btc_rpc.network()).unwrap(),
             (issue.amount + issue.fee) as u64,
             None,
             fee_rate,
@@ -213,6 +215,10 @@ pub async fn test_service<T: Future, U: Future>(service: T, fut: U) -> U::Output
         Either::Right((ret, _)) => ret,
         _ => panic!(),
     }
+}
+
+pub async fn with_timeout<T: Future>(future: T, duration: Duration) -> T::Output {
+    timeout(duration, future).await.expect("timeout")
 }
 
 pub async fn periodically_produce_blocks(parachain_rpc: InterBtcParachain) {

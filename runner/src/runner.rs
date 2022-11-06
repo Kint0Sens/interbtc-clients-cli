@@ -1,18 +1,16 @@
-use crate::error::Error;
+use crate::{error::Error, Opts};
 use backoff::{retry, Error as BackoffError, ExponentialBackoff};
 use bytes::Bytes;
 use codec::Decode;
-use futures::{future::BoxFuture, TryFutureExt};
-use jsonrpsee::{
-    core::client::{Client as WsClient, ClientT},
-    rpc_params,
-    ws_client::WsClientBuilder,
+use futures::{future::BoxFuture, FutureExt, StreamExt, TryFutureExt};
+use nix::{
+    sys::signal::{self, Signal},
+    unistd::Pid,
 };
-use mockall_double::double;
 use reqwest::Url;
-use sp_core::{hexdisplay::AsBytesRef, Bytes as SpCoreBytes, H256};
-use sp_core_hashing::twox_128;
-
+use sha2::{Digest, Sha256};
+use signal_hook_tokio::SignalsInfo;
+use sp_core::{hexdisplay::AsBytesRef, H256};
 use std::{
     convert::TryInto,
     fmt::{Debug, Display},
@@ -21,88 +19,151 @@ use std::{
     os::unix::prelude::OpenOptionsExt,
     path::PathBuf,
     process::{Child, Command, Stdio},
-    str,
+    str::{self, FromStr},
     time::Duration,
 };
 
-use futures_util::{FutureExt, StreamExt};
-use nix::{
-    sys::signal::{self, Signal},
-    unistd::Pid,
-};
-use signal_hook_tokio::SignalsInfo;
+use subxt::{dynamic::Value, OnlineClient, PolkadotConfig};
 
 use async_trait::async_trait;
 
-pub const PARACHAIN_MODULE: &str = "VaultRegistry";
-pub const CURRENT_RELEASE_STORAGE_ITEM: &str = "CurrentClientRelease";
-pub const PENDING_RELEASE_STORAGE_ITEM: &str = "PendingClientRelease";
-pub const BLOCK_TIME: Duration = Duration::from_secs(6);
+/// Type of the client to run.
+/// Also used as the name of the downloaded executable.
+#[derive(Debug, Clone)]
+pub enum ClientType {
+    Vault,
+    Oracle,
+    Faucet,
+}
 
-// One minute
-pub const RETRY_TIMEOUT_MS: u64 = 60_000;
+impl FromStr for ClientType {
+    type Err = crate::Error;
 
-// One second
-pub const RETRY_INTERVAL_MS: u64 = 1_000;
-
-// Constant interval retry
-pub const RETRY_MULTIPLIER: f64 = 1.0;
-
-// Wrap `WsClient` in a newtype pattern to be able to mock it.
-mod ws_client_newtype {
-    use crate::runner::WsClient;
-
-    pub struct WebsocketClient(WsClient);
-
-    #[cfg_attr(test, mockall::automock)]
-    impl WebsocketClient {
-        pub fn new(ws_client: WsClient) -> Self {
-            Self(ws_client)
-        }
-
-        pub fn inner(&self) -> &WsClient {
-            &self.0
-        }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let client_type = match s {
+            "vault" => ClientType::Vault,
+            "oracle" => ClientType::Oracle,
+            "faucet" => ClientType::Faucet,
+            _ => return Err(Error::ClientTypeParsingError),
+        };
+        Ok(client_type)
     }
 }
 
-#[double]
-use ws_client_newtype::WebsocketClient;
-
-#[derive(Decode, Default, Eq, PartialEq, Debug, Clone)]
-pub struct ClientRelease {
-    pub uri: String,
-    pub code_hash: H256,
+impl Display for ClientType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ClientType::Vault => "vault",
+            ClientType::Oracle => "oracle",
+            ClientType::Faucet => "faucet",
+        };
+        write!(f, "{}", s)
+    }
 }
 
+/// Pallet in the parachain where the client release is assumed to be stored
+pub const PARACHAIN_MODULE: &str = "ClientsInfo";
+
+/// Storage item in the Pallet where the client release is assumed to be stored
+pub const CURRENT_RELEASES_STORAGE_ITEM: &str = "CurrentClientReleases";
+
+/// Parachain block time
+pub const BLOCK_TIME: Duration = Duration::from_secs(6);
+
+/// Timeout used by the retry utilities: One minute
+pub const RETRY_TIMEOUT: Duration = Duration::from_millis(60_000);
+
+/// Waiting interval used by the retry utilities: One minute
+pub const RETRY_INTERVAL: Duration = Duration::from_millis(1_000);
+
+/// Multiplier for the interval in retry utilities: Constant interval retry
+pub const RETRY_MULTIPLIER: f64 = 1.0;
+
+/// Data type assumed to be used by the parachain to store the client release.
+/// If this type is different from the on-chain one, decoding will fail.
+#[derive(Decode, Default, Eq, PartialEq, Debug, Clone)]
+pub struct ClientRelease {
+    /// A link to the Releases page of the `interbtc-clients` repo.
+    /// Example: https://github.com/interlay/interbtc-clients/releases/download/1.16.0/vault-parachain-metadata-interlay
+    pub uri: String,
+    /// The SHA256 checksum of the client binary.
+    pub checksum: H256,
+}
+
+/// Wrapper around `ClientRelease`, which includes details for running the executable.
 #[derive(Default, Eq, PartialEq, Debug, Clone)]
 pub struct DownloadedRelease {
-    pub release: ClientRelease,
+    /// The SHA256 checksum of the client binary.
+    pub checksum: H256,
+    /// OS path where this release is stored
     pub path: PathBuf,
+    /// Name of the executable
     pub bin_name: String,
 }
 
+fn sha256sum(bytes: &[u8]) -> Vec<u8> {
+    let mut hasher = Sha256::default();
+    hasher.input(bytes);
+    hasher.result().as_slice().to_vec()
+}
+
+/// Per-network manager of the client executable
 pub struct Runner {
-    parachain_rpc: WebsocketClient,
-    vault_args: Vec<String>,
+    /// `subxt` api to the parachain
+    subxt_api: OnlineClient<PolkadotConfig>,
+    /// The child process (interbtc client) spawned by this runner
     child_proc: Option<Child>,
+    /// Details about the currently run release
     downloaded_release: Option<DownloadedRelease>,
-    download_path: PathBuf,
+    /// Runner CLI arguments
+    opts: Opts,
 }
 
 impl Runner {
-    pub fn new(parachain_rpc: WebsocketClient, vault_args: Vec<String>, download_path: PathBuf) -> Self {
+    pub fn new(subxt_api: OnlineClient<PolkadotConfig>, opts: Opts) -> Self {
         Self {
-            parachain_rpc,
-            vault_args,
+            subxt_api,
             child_proc: None,
             downloaded_release: None,
-            download_path,
+            opts,
         }
     }
 
+    fn try_load_downloaded_binary(runner: &mut impl RunnerExt, release: &ClientRelease) -> Result<(), Error> {
+        let (bin_name, bin_path) = runner.get_bin_path(&release.uri)?;
+        let file_content = fs::read(bin_path.clone()).map_err(|_| Error::NoDownloadedRelease)?;
+        let checksum = H256::from_slice(&sha256sum(&file_content));
+
+        if checksum != release.checksum {
+            return Err(Error::IncorrectChecksum);
+        }
+
+        let downloaded_release = DownloadedRelease {
+            checksum,
+            path: bin_path.clone(),
+            bin_name,
+        };
+
+        runner.set_downloaded_release(Some(downloaded_release));
+        if let Ok(stringified_path) = bin_path.into_os_string().into_string() {
+            log::info!(
+                "Loaded binary from disk, at {}, with checksum {:#x}",
+                stringified_path,
+                checksum
+            );
+        }
+        Ok(())
+    }
+
     async fn download_binary(runner: &mut impl RunnerExt, release: ClientRelease) -> Result<DownloadedRelease, Error> {
-        let (bin_name, bin_path) = runner.uri_to_bin_path(&release.uri)?;
+        if let Some(downloaded_release) = runner.downloaded_release() {
+            if downloaded_release.checksum.eq(&release.checksum) {
+                log::info!("The on-chain release is already downloaded, skipping re-download");
+                return Ok(downloaded_release.clone());
+            }
+        }
+
+        let (bin_name, bin_path) = runner.get_bin_path(&release.uri)?;
         log::info!("Downloading {} at: {:?}", bin_name, bin_path);
         let mut file = OpenOptions::new()
             .read(true)
@@ -123,15 +184,15 @@ impl Runner {
         file.sync_all()?;
 
         let downloaded_release = DownloadedRelease {
-            release,
+            checksum: release.checksum,
             path: bin_path,
-            bin_name: bin_name.to_string(),
+            bin_name,
         };
         runner.set_downloaded_release(Some(downloaded_release.clone()));
         Ok(downloaded_release)
     }
 
-    fn uri_to_bin_path(runner: &impl RunnerExt, uri: &str) -> Result<(String, PathBuf), Error> {
+    fn get_bin_path(runner: &impl RunnerExt, uri: &str) -> Result<(String, PathBuf), Error> {
         // Remove any trailing slashes from the release URI
         let parsed_uri = Url::parse(uri.trim_end_matches('/'))?;
         let bin_name = parsed_uri
@@ -139,6 +200,7 @@ impl Runner {
             .and_then(|segments| segments.last())
             .and_then(|name| if name.is_empty() { None } else { Some(name) })
             .ok_or(Error::ClientNameDerivationError)?;
+
         let bin_path = runner.download_path().join(bin_name);
         Ok((bin_name.to_string(), bin_path))
     }
@@ -157,7 +219,14 @@ impl Runner {
     }
 
     fn terminate_proc_and_wait(runner: &mut impl RunnerExt) -> Result<u32, Error> {
-        let child_proc = runner.child_proc().as_mut().ok_or(Error::NoChildProcess)?;
+        log::info!("Trying to terminate child process...");
+        let child_proc = match runner.child_proc().as_mut() {
+            Some(x) => x,
+            None => {
+                log::warn!("No child process to terminate.");
+                return Ok(0);
+            }
+        };
 
         let _ = retry_with_log(
             || {
@@ -172,34 +241,22 @@ impl Runner {
 
         match child_proc.wait() {
             Ok(exit_status) => log::info!(
-                "Terminated vault process (pid: {}) with exit status {}",
+                "Terminated client process (pid: {}) with exit status {}",
                 child_proc.id(),
                 exit_status
             ),
-            Err(error) => log::warn!("Vault process termination error: {}", error),
+            Err(error) => log::warn!("Client process termination error: {}", error),
         };
         let pid = child_proc.id();
         runner.set_child_proc(None);
         Ok(pid)
     }
 
-    async fn try_get_release<T: RunnerExt + StorageReader>(
-        runner: &T,
-        pending: bool,
-    ) -> Result<Option<ClientRelease>, Error> {
-        let storage_item = if pending {
-            PENDING_RELEASE_STORAGE_ITEM
-        } else {
-            CURRENT_RELEASE_STORAGE_ITEM
-        };
-
-        let storage_key = runner.compute_storage_key(PARACHAIN_MODULE.to_string(), storage_item.to_string());
-
+    async fn try_get_release<T: RunnerExt + StorageReader>(runner: &T) -> Result<Option<ClientRelease>, Error> {
         retry_with_log_async(
             || {
-                let key = &storage_key;
                 runner
-                    .read_chain_storage::<ClientRelease>(runner.parachain_rpc(), Some(key.to_string()))
+                    .read_chain_storage::<ClientRelease>(runner.subxt_api())
                     .into_future()
                     .boxed()
             },
@@ -208,29 +265,42 @@ impl Runner {
         .await
     }
 
-    async fn read_chain_storage<T: 'static + Decode + Debug, V: RunnerExt + StorageReader>(
-        runner: &V,
-        parachain_rpc: &WebsocketClient,
-        maybe_storage_key: Option<String>,
+    /// Read parachain storage via an RPC call, and decode the result
+    async fn read_chain_storage<T: 'static + Decode + Debug>(
+        client_type: &ClientType,
+        subxt_api: &OnlineClient<PolkadotConfig>,
     ) -> Result<Option<T>, Error> {
-        let enc_res = runner
-            .query_storage(parachain_rpc, maybe_storage_key, "state_getStorage".to_string())
-            .await;
+        // Based on the implementation of `subxt_api.storage().fetch(...)`, but with decoding for a custom type. Source:
+        // https://github.com/paritytech/subxt/blob/99cea97f817ee0a6fee642ff22f867822d9557f6/subxt/src/storage/storage_client.rs#L142
+        let storage_address = subxt::dynamic::storage(
+            PARACHAIN_MODULE,
+            CURRENT_RELEASES_STORAGE_ITEM,
+            vec![Value::from_bytes(client_type.to_string().as_bytes())],
+        );
+        let lookup_bytes = subxt::storage::utils::storage_address_bytes(&storage_address, &subxt_api.metadata())?;
+        let enc_res = subxt_api
+            .storage()
+            .fetch_raw(&lookup_bytes, None)
+            .await?
+            .map(Bytes::from);
         enc_res
             .map(|r| T::decode(&mut r.as_bytes_ref()))
             .transpose()
             .map_err(Into::into)
     }
 
+    /// Run the auto-updater while concurrently listening for termination signals.
     pub async fn run(mut runner: Box<dyn RunnerExt + Send>, mut shutdown_signals: SignalsInfo) -> Result<(), Error> {
         tokio::select! {
             _ = shutdown_signals.next() => {
-                log::info!("Terminating vault...");
                 runner.terminate_proc_and_wait()?;
-            },
-            _ = runner.as_mut().auto_update() => {
-                log::error!("Auto-updater unexpectedly terminated.");
-                return Err(Error::AutoUpdaterTerminated);
+            }
+            result = runner.as_mut().auto_update() => {
+                match result {
+                    Ok(_) => log::error!("Auto-updater unexpectedly terminated."),
+                    Err(e) => log::error!("Runner error: {}", e),
+                }
+                runner.terminate_proc_and_wait()?;
             }
         };
         Ok(())
@@ -239,20 +309,32 @@ impl Runner {
     async fn auto_update(runner: &mut impl RunnerExt) -> Result<(), Error> {
         // Create all directories for the `download_path` if they don't already exist.
         fs::create_dir_all(&runner.download_path())?;
-        let release = runner.try_get_release(false).await?.expect("No current release");
-        // WARNING: This will overwrite any pre-existing binary with the same name
-        // TODO: Check if a release with the same version is already at the `download_path`
-        runner.download_binary(release).await?;
+
+        let release = runner
+            .try_get_release()
+            .await?
+            .expect("No current client release set on-chain.");
+
+        if runner.try_load_downloaded_binary(&release).is_err() {
+            // something went wrong while loading the binary: it is outdated,
+            // non-existent, or something else went wrong. In all of these
+            // case, try to download the newest binary
+            runner.download_binary(release).await?;
+        }
 
         runner.run_binary()?;
 
         loop {
-            if let Some(new_release) = runner.try_get_release(false).await? {
+            runner.maybe_restart_client()?;
+            if let Some(new_release) = runner.try_get_release().await? {
                 let maybe_downloaded_release = runner.downloaded_release();
                 let downloaded_release = maybe_downloaded_release.as_ref().ok_or(Error::NoDownloadedRelease)?;
-                if new_release.uri != downloaded_release.release.uri {
+                if new_release.checksum != downloaded_release.checksum {
+                    log::info!("Found new client release, updating...");
+
                     // Wait for child process to finish completely.
-                    // To ensure there can't be two vault processes using the same Bitcoin wallet.
+                    // To ensure there can't be two client processes using the same resources (such as the Bitcoin
+                    // wallet for vaults).
                     runner.terminate_proc_and_wait()?;
 
                     // Delete old release
@@ -269,51 +351,106 @@ impl Runner {
         }
     }
 
+    fn maybe_restart_client(runner: &mut impl RunnerExt) -> Result<(), Error> {
+        if !runner.check_child_proc_alive()? {
+            runner.run_binary()?;
+        }
+        Ok(())
+    }
+
+    fn check_child_proc_alive(runner: &mut impl RunnerExt) -> Result<bool, Error> {
+        if let Some(child) = runner.child_proc() {
+            // `try_wait` only returns if the child has already exited,
+            // without actually doing any waiting
+            match child.try_wait()? {
+                Some(status) => {
+                    log::info!("Child exited with: {status}");
+                    runner.set_child_proc(None);
+                    return Ok(false);
+                }
+                None => {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
+    }
+
     fn run_binary(runner: &mut impl RunnerExt, stdout_mode: impl Into<Stdio>) -> Result<Child, Error> {
-        // Ensure there is no other child running
         if runner.child_proc().is_some() {
             return Err(Error::ChildProcessExists);
         }
         let downloaded_release = runner.downloaded_release().as_ref().ok_or(Error::NoDownloadedRelease)?;
         let mut command = Command::new(downloaded_release.path.as_os_str());
-        command.args(runner.vault_args().clone()).stdout(stdout_mode);
+        command.args(runner.client_args().clone()).stdout(stdout_mode);
         let child = retry_with_log(
-            || command.spawn().map_err(|e| e.into()),
+            || command.spawn().map_err(Into::into),
             "Failed to spawn child process".to_string(),
         )?;
-        log::info!("Vault started, with pid {}", child.id());
+        log::info!("Client started, with pid {}", child.id());
         Ok(child)
+    }
+}
+
+impl Drop for Runner {
+    fn drop(&mut self) {
+        if self
+            .check_child_proc_alive()
+            .expect("Failed to check child process status")
+        {
+            if let Err(e) = self.terminate_proc_and_wait() {
+                log::warn!("Failed to terminate child process: {}", e);
+            }
+        }
     }
 }
 
 #[async_trait]
 pub trait RunnerExt {
-    fn parachain_rpc(&self) -> &WebsocketClient;
-    fn vault_args(&self) -> &Vec<String>;
+    fn subxt_api(&self) -> &OnlineClient<PolkadotConfig>;
+    fn client_args(&self) -> &Vec<String>;
     fn child_proc(&mut self) -> &mut Option<Child>;
     fn set_child_proc(&mut self, child_proc: Option<Child>);
     fn downloaded_release(&self) -> &Option<DownloadedRelease>;
     fn set_downloaded_release(&mut self, downloaded_release: Option<DownloadedRelease>);
     fn download_path(&self) -> &PathBuf;
-    fn set_download_path(&mut self, download_path: PathBuf);
-    async fn try_get_release(&self, pending: bool) -> Result<Option<ClientRelease>, Error>;
+    fn parachain_url(&self) -> String;
+    fn client_type(&self) -> ClientType;
+    /// Read the current client release from the parachain, retrying for `RETRY_TIMEOUT` if there is a network error.
+    async fn try_get_release(&self) -> Result<Option<ClientRelease>, Error>;
+    /// Download the client binary and make it executable, retrying for `RETRY_TIMEOUT` if there is a network error.
     async fn download_binary(&mut self, release: ClientRelease) -> Result<(), Error>;
-    fn uri_to_bin_path(&self, uri: &str) -> Result<(String, PathBuf), Error>;
+    /// Convert a release URI (e.g. a GitHub link) to an executable name and OS path (after download)
+    fn get_bin_path(&self, uri: &str) -> Result<(String, PathBuf), Error>;
+    /// Remove downloaded release from the file system. This is only supposed to occur _after_ the client process
+    /// has been killed. In case of failure, removing is retried for `RETRY_TIMEOUT`.
     fn delete_downloaded_release(&mut self) -> Result<(), Error>;
+    /// Spawn a the client as a child process with the CLI arguments set in the `Runner`, retrying for
+    /// `RETRY_TIMEOUT`.
     fn run_binary(&mut self) -> Result<(), Error>;
+    /// Send a `SIGTERM` to the child process (via the underlying `kill` system call).
+    /// If `kill` returns an error code, the operation is retried for `RETRY_TIMEOUT`.
     fn terminate_proc_and_wait(&mut self) -> Result<(), Error>;
+    /// Get the client release executable, as `Bytes`
     async fn get_request_bytes(&self, url: String) -> Result<Bytes, Error>;
+    /// Main loop, checks the parachain for new releases and updates the client accordingly.
     fn auto_update(&mut self) -> BoxFuture<'_, Result<(), Error>>;
+    /// Returns whether the child is alive and sets the `runner.child` field to `None` if not.
+    fn check_child_proc_alive(&mut self) -> Result<bool, Error>;
+    /// If the child process crashed, start it again
+    fn maybe_restart_client(&mut self) -> Result<(), Error>;
+    /// If a client binary exists on disk, load it.
+    fn try_load_downloaded_binary(&mut self, release: &ClientRelease) -> Result<(), Error>;
 }
 
 #[async_trait]
 impl RunnerExt for Runner {
-    fn parachain_rpc(&self) -> &WebsocketClient {
-        &self.parachain_rpc
+    fn subxt_api(&self) -> &OnlineClient<PolkadotConfig> {
+        &self.subxt_api
     }
 
-    fn vault_args(&self) -> &Vec<String> {
-        &self.vault_args
+    fn client_args(&self) -> &Vec<String> {
+        &self.opts.client_args
     }
 
     fn child_proc(&mut self) -> &mut Option<Child> {
@@ -333,15 +470,19 @@ impl RunnerExt for Runner {
     }
 
     fn download_path(&self) -> &PathBuf {
-        &self.download_path
+        &self.opts.download_path
     }
 
-    fn set_download_path(&mut self, download_path: PathBuf) {
-        self.download_path = download_path;
+    fn parachain_url(&self) -> String {
+        self.opts.parachain_ws.clone()
     }
 
-    async fn try_get_release(&self, pending: bool) -> Result<Option<ClientRelease>, Error> {
-        Runner::try_get_release(self, pending).await
+    fn client_type(&self) -> ClientType {
+        self.opts.client_type.clone()
+    }
+
+    async fn try_get_release(&self) -> Result<Option<ClientRelease>, Error> {
+        Runner::try_get_release(self).await
     }
 
     fn run_binary(&mut self) -> Result<(), Error> {
@@ -355,8 +496,8 @@ impl RunnerExt for Runner {
         Ok(())
     }
 
-    fn uri_to_bin_path(&self, uri: &str) -> Result<(String, PathBuf), Error> {
-        Runner::uri_to_bin_path(self, uri)
+    fn get_bin_path(&self, uri: &str) -> Result<(String, PathBuf), Error> {
+        Runner::get_bin_path(self, uri)
     }
 
     fn delete_downloaded_release(&mut self) -> Result<(), Error> {
@@ -379,61 +520,46 @@ impl RunnerExt for Runner {
     fn auto_update(&mut self) -> BoxFuture<'_, Result<(), Error>> {
         Runner::auto_update(self).into_future().boxed()
     }
+
+    fn check_child_proc_alive(&mut self) -> Result<bool, Error> {
+        Runner::check_child_proc_alive(self)
+    }
+
+    fn maybe_restart_client(&mut self) -> Result<(), Error> {
+        Runner::maybe_restart_client(self)
+    }
+
+    fn try_load_downloaded_binary(&mut self, release: &ClientRelease) -> Result<(), Error> {
+        Runner::try_load_downloaded_binary(self, release)
+    }
 }
 
 #[async_trait]
 pub trait StorageReader {
-    fn compute_storage_key(&self, module: String, key: String) -> String;
-    async fn query_storage(
-        &self,
-        parachain_rpc: &WebsocketClient,
-        maybe_storage_key: Option<String>,
-        method: String,
-    ) -> Option<SpCoreBytes>;
     async fn read_chain_storage<T: 'static + Decode + Debug>(
         &self,
-        parachain_rpc: &WebsocketClient,
-        maybe_storage_key: Option<String>,
+        subxt_api: &OnlineClient<PolkadotConfig>,
     ) -> Result<Option<T>, Error>;
 }
 
 #[async_trait]
 impl StorageReader for Runner {
-    fn compute_storage_key(&self, module: String, key: String) -> String {
-        let module = twox_128(module.as_bytes());
-        let item = twox_128(key.as_bytes());
-        let key = hex::encode([module, item].concat());
-        format!("0x{}", key)
-    }
-
-    async fn query_storage(
-        &self,
-        parachain_rpc: &WebsocketClient,
-        maybe_storage_key: Option<String>,
-        method: String,
-    ) -> Option<SpCoreBytes> {
-        let params = maybe_storage_key.map_or(rpc_params![], |key| rpc_params![key]);
-        parachain_rpc.inner().request(method.as_str(), params).await.ok()
-    }
-
     async fn read_chain_storage<T: 'static + Decode + Debug>(
         &self,
-        parachain_rpc: &WebsocketClient,
-        maybe_storage_key: Option<String>,
+        subxt_api: &OnlineClient<PolkadotConfig>,
     ) -> Result<Option<T>, Error> {
-        Runner::read_chain_storage(self, parachain_rpc, maybe_storage_key).await
+        Runner::read_chain_storage(&self.client_type(), subxt_api).await
     }
 }
 
-pub async fn ws_client(url: &str) -> Result<WebsocketClient, Error> {
-    let ws_client = WsClientBuilder::default().build(url).await?;
-    Ok(WebsocketClient::new(ws_client))
+pub async fn subxt_api(url: &str) -> Result<OnlineClient<PolkadotConfig>, Error> {
+    Ok(OnlineClient::from_url(url).await?)
 }
 
 pub fn custom_retry_config() -> ExponentialBackoff {
     ExponentialBackoff {
-        initial_interval: Duration::from_millis(RETRY_INTERVAL_MS),
-        max_elapsed_time: Some(Duration::from_millis(RETRY_TIMEOUT_MS)),
+        initial_interval: RETRY_INTERVAL,
+        max_elapsed_time: Some(RETRY_TIMEOUT),
         multiplier: RETRY_MULTIPLIER,
         ..ExponentialBackoff::default()
     }
@@ -449,7 +575,7 @@ where
             BackoffError::Transient(e)
         })
     })
-    .map_err(|e| e.into())
+    .map_err(Into::into)
 }
 
 pub async fn retry_with_log_async<'a, T, F, E>(f: F, log_msg: String) -> Result<T, Error>
@@ -464,7 +590,7 @@ where
         })
     })
     .await
-    .map_err(|e| e.into())
+    .map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -474,7 +600,7 @@ mod tests {
     use codec::Decode;
 
     use futures::future::BoxFuture;
-    use sp_core::{Bytes as SpCoreBytes, H256};
+    use sp_core::H256;
     use tempdir::TempDir;
 
     use std::{
@@ -498,42 +624,48 @@ mod tests {
 
     use sysinfo::{Pid, System, SystemExt};
 
+    macro_rules! assert_err {
+        ($result:expr, $err:pat) => {{
+            match $result {
+                Err($err) => (),
+                Ok(v) => panic!("assertion failed: Ok({:?})", v),
+                _ => panic!("expected: Err($err)"),
+            }
+        }};
+    }
+
     mockall::mock! {
         Runner {}
 
         #[async_trait]
         pub trait RunnerExt {
-            fn parachain_rpc(&self) -> &WebsocketClient;
-            fn vault_args(&self) -> &Vec<String>;
+            fn subxt_api(&self) -> &OnlineClient<PolkadotConfig>;
+            fn client_args(&self) -> &Vec<String>;
             fn child_proc(&mut self) -> &mut Option<Child>;
             fn set_child_proc(&mut self, child_proc: Option<Child>);
             fn downloaded_release(&self) -> &Option<DownloadedRelease>;
             fn set_downloaded_release(&mut self, downloaded_release: Option<DownloadedRelease>);
             fn download_path(&self) -> &PathBuf;
-            fn set_download_path(&mut self, download_path: PathBuf);
-            async fn try_get_release(&self, pending: bool) -> Result<Option<ClientRelease>, Error>;
+            fn parachain_url(&self) -> String;
+            fn client_type(&self) -> ClientType;
+            async fn try_get_release(&self) -> Result<Option<ClientRelease>, Error>;
             async fn download_binary(&mut self, release: ClientRelease) -> Result<(), Error>;
-            fn uri_to_bin_path(&self, uri: &str) -> Result<(String, PathBuf), Error>;
+            fn get_bin_path(&self, uri: &str) -> Result<(String, PathBuf), Error>;
             fn delete_downloaded_release(&mut self) -> Result<(), Error>;
             fn run_binary(&mut self) -> Result<(), Error>;
             fn terminate_proc_and_wait(&mut self) -> Result<(), Error>;
             async fn get_request_bytes(&self, url: String) -> Result<Bytes, Error>;
             fn auto_update(&mut self) ->  BoxFuture<'static, Result<(), Error>>;
+            fn check_child_proc_alive(&mut self) -> Result<bool, Error>;
+            fn maybe_restart_client(&mut self) -> Result<(), Error>;
+            fn try_load_downloaded_binary(&mut self, release: &ClientRelease) -> Result<(), Error>;
         }
 
         #[async_trait]
         pub trait StorageReader {
-            fn compute_storage_key(&self, module: String, key: String) -> String;
-            async fn query_storage(
-                &self,
-                parachain_rpc: &WebsocketClient,
-                maybe_storage_key: Option<String>,
-                method: String,
-            ) -> Option<SpCoreBytes>;
             async fn read_chain_storage<T: 'static + Decode + Debug>(
                 &self,
-                parachain_rpc: &WebsocketClient,
-                maybe_storage_key: Option<String>,
+                subxt_api: &OnlineClient<PolkadotConfig>,
             ) -> Result<Option<T>, Error>;
         }
     }
@@ -549,15 +681,16 @@ mod tests {
         let client_release = ClientRelease {
             uri: "https://github.com/interlay/interbtc-clients/releases/download/1.15.0/vault-standalone-metadata"
                 .to_string(),
-            code_hash: H256::default(),
+            checksum: H256::default(),
         };
 
         runner
-            .expect_uri_to_bin_path()
+            .expect_get_bin_path()
             .returning(move |_| Ok(("vault-standalone-metadata".to_string(), moved_mock_path.clone())));
         runner
             .expect_get_request_bytes()
             .returning(|_| Ok(Bytes::from_static(&[1, 2, 3, 4])));
+        runner.expect_downloaded_release().return_const(None);
         runner.expect_set_downloaded_release().return_const(());
 
         let downloaded_release = Runner::download_binary(&mut runner, client_release.clone())
@@ -566,7 +699,7 @@ mod tests {
         assert_eq!(
             downloaded_release,
             DownloadedRelease {
-                release: client_release,
+                checksum: client_release.checksum,
                 path: mock_path.clone(),
                 bin_name: mock_bin_name
             }
@@ -591,19 +724,44 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_runner_uri_to_bin_path() {
+    async fn test_runner_binary_is_not_redownloaded() {
         let mut runner = MockRunner::default();
+        let downloaded_release = DownloadedRelease::default();
+
         runner
-            .expect_download_path()
-            .return_const(PathBuf::from_str("./mock_download_dir").unwrap());
-        let uri = "https://github.com/interlay/interbtc-clients/releases/download/1.15.0/vault-standalone-metadata"
-            .to_string();
-        let (bin_name, bin_path) = Runner::uri_to_bin_path(&runner, &uri).unwrap();
-        assert_eq!(bin_name, "vault-standalone-metadata".to_string());
-        assert_eq!(
-            bin_path,
-            PathBuf::from_str("./mock_download_dir/vault-standalone-metadata").unwrap()
-        );
+            .expect_downloaded_release()
+            .return_const(Some(downloaded_release.clone()));
+
+        // No release should be set in the runner
+        runner
+            .expect_set_downloaded_release()
+            .times(0)
+            .returning(|_| panic!("Unexpected call"));
+
+        // The latest on-chain release matches the currently downloaded one
+        let new_downloaded_release = Runner::download_binary(&mut runner, ClientRelease::default())
+            .await
+            .unwrap();
+
+        assert_eq!(downloaded_release, new_downloaded_release);
+    }
+
+    #[tokio::test]
+    async fn test_runner_get_bin_path() {
+        let clients = [ClientType::Vault, ClientType::Oracle, ClientType::Faucet];
+        let mock_path = PathBuf::from_str("./mock_download_dir").unwrap();
+        for client in clients {
+            let mut runner = MockRunner::default();
+            runner.expect_download_path().return_const(mock_path.clone());
+            runner.expect_client_type().return_const(client.clone());
+            let (bin_name, bin_path) = Runner::get_bin_path(
+                &runner,
+                "https://github.com/interlay/interbtc-clients/releases/download/1.17.2/vault-standalone-metadata",
+            )
+            .unwrap();
+            assert_eq!(bin_name, "vault-standalone-metadata");
+            assert_eq!(bin_path, mock_path.join(bin_name));
+        }
     }
 
     #[tokio::test]
@@ -615,10 +773,7 @@ mod tests {
 
         let mut runner = MockRunner::default();
         let downloaded_release = DownloadedRelease {
-            release: ClientRelease {
-                uri: String::default(),
-                code_hash: H256::default(),
-            },
+            checksum: H256::default(),
             path: mock_path.clone(),
             bin_name: String::default(),
         };
@@ -648,44 +803,6 @@ mod tests {
         let child_process = processes.get(&Pid::from(pid_i32));
 
         assert_eq!(child_process.is_none(), true);
-    }
-
-    #[tokio::test]
-    async fn test_runner_try_get_release() {
-        let mut runner = MockRunner::default();
-        let expected_storage_key = "0x8402aaa79721798ff725d48776181a4428c2fc0938165431e2fa3fc50f072550".to_string();
-        let mock_storage_value = vec![
-            125, 1, 104, 116, 116, 112, 115, 58, 47, 47, 103, 105, 116, 104, 117, 98, 46, 99, 111, 109, 47, 105, 110,
-            116, 101, 114, 108, 97, 121, 47, 105, 110, 116, 101, 114, 98, 116, 99, 45, 99, 108, 105, 101, 110, 116,
-            115, 47, 114, 101, 108, 101, 97, 115, 101, 115, 47, 100, 111, 119, 110, 108, 111, 97, 100, 47, 49, 46, 49,
-            53, 46, 48, 47, 118, 97, 117, 108, 116, 45, 115, 116, 97, 110, 100, 97, 108, 111, 110, 101, 45, 109, 101,
-            116, 97, 100, 97, 116, 97, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 18, 48, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0,
-        ];
-        let mock_ws_client = WebsocketClient::default();
-        runner
-            .expect_query_storage()
-            .return_const(Some(SpCoreBytes::from(mock_storage_value)));
-
-        let release = Runner::read_chain_storage::<ClientRelease, MockRunner>(
-            &runner,
-            &mock_ws_client,
-            Some(expected_storage_key),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-        let expected_uri =
-            "https://github.com/interlay/interbtc-clients/releases/download/1.15.0/vault-standalone-metadata"
-                .to_string();
-        assert_eq!(
-            release,
-            ClientRelease {
-                uri: expected_uri,
-                code_hash: H256::from_str("0x0000000000000000000000000000000000000000123000000000000000000000")
-                    .unwrap()
-            }
-        );
     }
 
     #[tokio::test]
@@ -732,7 +849,7 @@ mod tests {
         .collect();
 
         let mock_downloaded_release = DownloadedRelease {
-            release: ClientRelease::default(),
+            checksum: H256::default(),
             path: mock_executable_path.clone(),
             bin_name: String::default(),
         };
@@ -740,7 +857,7 @@ mod tests {
         runner
             .expect_downloaded_release()
             .return_const(Some(mock_downloaded_release));
-        runner.expect_vault_args().return_const(mock_vault_args.clone());
+        runner.expect_client_args().return_const(mock_vault_args.clone());
         runner.expect_set_child_proc().return_const(());
         let child = Runner::run_binary(&mut runner, Stdio::piped()).unwrap();
 
@@ -752,7 +869,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_runner_terminate_child_proc() {
+    async fn test_runner_terminate_child_proc_on_signal() {
         let mut runner = MockRunner::default();
         runner.expect_terminate_proc_and_wait().once().returning(|| Ok(()));
         runner.expect_auto_update().returning(|| {
@@ -769,5 +886,214 @@ mod tests {
         thread::sleep(Duration::from_millis(100));
         signal_hook::low_level::raise(SIGTERM).unwrap();
         task.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_runner_terminate_child_proc_on_crash() {
+        let mut runner = MockRunner::default();
+        // Assume the auto-updater crashes
+        runner.expect_auto_update().returning(|| {
+            // return an arbitrary error
+            Box::pin(async { Err(Error::ProcessTerminationFailure) })
+        });
+        // The child process must be killed before shutting down the runner
+        runner.expect_terminate_proc_and_wait().once().returning(|| Ok(()));
+
+        let shutdown_signals = Signals::new(&[]).unwrap();
+        let task = tokio::spawn(Runner::run(Box::new(runner), shutdown_signals));
+        task.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_runner_child_restarts_if_crashed() {
+        let mut runner = MockRunner::default();
+        runner.expect_check_child_proc_alive().returning(|| Ok(false));
+
+        // The test passes as long as `run_binary` is called
+        runner.expect_run_binary().once().returning(|| Ok(()));
+        Runner::maybe_restart_client(&mut runner).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_runner_terminate_child_process_does_not_throw() {
+        let mut runner = MockRunner::default();
+        runner.expect_child_proc().return_var(None);
+        assert_eq!(Runner::terminate_proc_and_wait(&mut runner).unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_runner_loading_binary_fails() {
+        let mut runner = MockRunner::default();
+
+        runner.expect_get_bin_path().returning(move |_| {
+            Ok((
+                "client".to_string(),
+                TempDir::new("runner-tests").unwrap().into_path().join("client"),
+            ))
+        });
+
+        assert_err!(
+            Runner::try_load_downloaded_binary(&mut runner, &Default::default()),
+            Error::NoDownloadedRelease
+        );
+    }
+
+    #[tokio::test]
+    async fn test_runner_loading_existing_binary_works() {
+        let tmp = TempDir::new("runner-tests").expect("failed to create tempdir");
+        let mock_path = tmp.path().clone().join("client");
+        let moved_mock_path = tmp.path().clone().join("client");
+        let mut runner = MockRunner::default();
+
+        {
+            let mut file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(mock_path.clone())
+                .unwrap();
+            file.write_all(b"dummy file").unwrap();
+            file.sync_all().unwrap();
+        }
+
+        runner
+            .expect_get_bin_path()
+            .returning(move |_| Ok(("client".to_string(), moved_mock_path.clone())));
+        runner.expect_set_downloaded_release().returning(|release_option| {
+            let checksum = release_option.unwrap().checksum;
+            let expected_checksum = H256::from_slice(&[
+                81, 216, 24, 152, 19, 116, 164, 71, 240, 135, 102, 16, 253, 43, 174, 235, 145, 29, 213, 173, 96, 198,
+                230, 180, 210, 182, 182, 121, 139, 165, 192, 113,
+            ]);
+            assert_eq!(checksum, expected_checksum);
+        });
+        let release = ClientRelease {
+            checksum: H256::from_slice(&[
+                81, 216, 24, 152, 19, 116, 164, 71, 240, 135, 102, 16, 253, 43, 174, 235, 145, 29, 213, 173, 96, 198,
+                230, 180, 210, 182, 182, 121, 139, 165, 192, 113,
+            ]),
+            ..Default::default()
+        };
+        Runner::try_load_downloaded_binary(&mut runner, &release).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_try_load_downloaded_binary_checks_checksum() {
+        let tmp = TempDir::new("runner-tests").expect("failed to create tempdir");
+        let mock_path = tmp.path().clone().join("client");
+        let moved_mock_path = tmp.path().clone().join("client");
+        let mut runner = MockRunner::default();
+
+        {
+            let mut file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(mock_path.clone())
+                .unwrap();
+            file.write_all(b"dummy file").unwrap();
+            file.sync_all().unwrap();
+        }
+
+        runner
+            .expect_get_bin_path()
+            .returning(move |_| Ok(("client".to_string(), moved_mock_path.clone())));
+
+        assert_err!(
+            Runner::try_load_downloaded_binary(&mut runner, &Default::default()),
+            Error::IncorrectChecksum
+        );
+    }
+
+    #[tokio::test]
+    async fn test_runner_invalid_binary_prompts_download() {
+        let tmp = TempDir::new("runner-tests").expect("failed to create tempdir");
+        let mock_path = tmp.path().clone().join("client");
+        let mut runner = MockRunner::default();
+
+        runner.expect_download_path().return_const(mock_path.clone());
+        runner
+            .expect_try_load_downloaded_binary()
+            .returning(|_| Err(Error::IncorrectChecksum));
+
+        runner
+            .expect_try_get_release()
+            .once()
+            .returning(|| Ok(Some(ClientRelease::default())));
+        runner.expect_download_binary().once().returning(|release| {
+            assert_eq!(release, ClientRelease::default());
+            Ok(())
+        });
+
+        // return arbitrary error to terminate the `auto_update` function
+        runner
+            .expect_run_binary()
+            .once()
+            .returning(|| Err(Error::ProcessTerminationFailure));
+
+        assert_err!(Runner::auto_update(&mut runner).await, Error::ProcessTerminationFailure);
+    }
+
+    #[tokio::test]
+    async fn test_runner_nonexistent_binary_prompts_download() {
+        let tmp = TempDir::new("runner-tests").expect("failed to create tempdir");
+        let mock_path = tmp.path().clone().join("client");
+        let mut runner = MockRunner::default();
+
+        runner.expect_download_path().return_const(mock_path.clone());
+        runner
+            .expect_try_load_downloaded_binary()
+            .returning(|_| Err(Error::NoDownloadedRelease));
+
+        runner
+            .expect_try_get_release()
+            .once()
+            .returning(|| Ok(Some(ClientRelease::default())));
+        runner.expect_download_binary().once().returning(|release| {
+            assert_eq!(release, ClientRelease::default());
+            Ok(())
+        });
+
+        // return arbitrary error to terminate the `auto_update` function
+        runner
+            .expect_run_binary()
+            .once()
+            .returning(|| Err(Error::ProcessTerminationFailure));
+
+        assert_err!(Runner::auto_update(&mut runner).await, Error::ProcessTerminationFailure);
+    }
+
+    #[tokio::test]
+    async fn test_runner_different_checksum_prompts_download() {
+        let tmp = TempDir::new("runner-tests").expect("failed to create tempdir");
+        let mock_path = tmp.path().clone().join("client");
+        let mut runner = MockRunner::default();
+
+        runner.expect_download_path().return_const(mock_path.clone());
+        runner.expect_try_load_downloaded_binary().returning(|_| Ok(()));
+        runner.expect_run_binary().once().returning(|| Ok(()));
+        runner.expect_maybe_restart_client().once().returning(|| Ok(()));
+
+        runner.expect_try_get_release().times(2).returning(|| {
+            Ok(Some(ClientRelease {
+                uri: Default::default(),
+                checksum: H256::from_low_u64_be(10),
+            }))
+        });
+        runner
+            .expect_downloaded_release()
+            .once()
+            .return_const(Some(DownloadedRelease {
+                path: Default::default(),
+                bin_name: Default::default(),
+                checksum: H256::from_low_u64_be(11),
+            }));
+
+        // return arbitrary error to terminate the `auto_update` function
+        runner
+            .expect_terminate_proc_and_wait()
+            .returning(|| Err(Error::ProcessTerminationFailure));
+
+        assert_err!(Runner::auto_update(&mut runner).await, Error::ProcessTerminationFailure);
     }
 }

@@ -1,20 +1,19 @@
 use crate::{error::Error, metrics::update_bitcoin_metrics, system::VaultData, VaultIdManager};
 use bitcoin::{
-    BitcoinCoreApi, Transaction, TransactionExt, TransactionMetadata, BLOCK_INTERVAL as BITCOIN_BLOCK_INTERVAL,
+    Error as BitcoinError, SatPerVbyte, Transaction, TransactionExt, TransactionMetadata, Txid,
+    BLOCK_INTERVAL as BITCOIN_BLOCK_INTERVAL,
 };
-use futures::{
-    stream::{self, StreamExt},
-    try_join, TryStreamExt,
-};
+use futures::{future::Either, stream::StreamExt, try_join, TryStreamExt};
 use runtime::{
-    BtcAddress, BtcRelayPallet, FixedPointNumber, FixedU128, H256Le, InterBtcParachain, InterBtcRedeemRequest,
-    InterBtcRefundRequest, InterBtcReplaceRequest, IssuePallet, OraclePallet, PrettyPrint, RedeemPallet,
-    RedeemRequestStatus, RefundPallet, ReplacePallet, ReplaceRequestStatus, RequestRefundEvent, SecurityPallet,
-    UtilFuncs, VaultId, VaultRegistryPallet, H256,
+    BtcAddress, BtcRelayPallet, Error as RuntimeError, FixedPointNumber, FixedU128, H256Le, InterBtcParachain,
+    InterBtcRedeemRequest, InterBtcReplaceRequest, OraclePallet, PartialAddress, PrettyPrint, RedeemPallet,
+    RedeemRequestStatus, ReplacePallet, ReplaceRequestStatus, SecurityPallet, UtilFuncs, VaultId, VaultRegistryPallet,
+    H256,
 };
-use service::{spawn_cancelable, ShutdownSender};
+use service::{spawn_cancelable, DynBitcoinCoreApi, Error as ServiceError, ShutdownSender};
 use std::{collections::HashMap, convert::TryInto, time::Duration};
 use tokio::time::sleep;
+use tokio_stream::wrappers::BroadcastStream;
 
 const ON_FORK_RETRY_DELAY: Duration = Duration::from_secs(10);
 
@@ -60,7 +59,6 @@ pub fn parachain_blocks_to_bitcoin_blocks_rounded_up(parachain_blocks: u32) -> R
 pub enum RequestType {
     Redeem,
     Replace,
-    Refund,
 }
 
 impl Request {
@@ -142,49 +140,20 @@ impl Request {
         })
     }
 
-    /// Constructs a Request for the given InterBtcRefundRequest
-    fn from_refund_request(hash: H256, request: InterBtcRefundRequest, btc_height: u32) -> Request {
-        Request {
-            hash,
-            deadline: None,
-            btc_height: Some(btc_height),
-            amount: request.amount_btc,
-            btc_address: request.btc_address,
-            request_type: RequestType::Refund,
-            vault_id: request.vault,
-            fee_budget: Some(request.transfer_fee_btc),
-        }
-    }
-
-    /// Constructs a Request for the given RequestRefundEvent
-    pub fn from_refund_request_event(request: &RequestRefundEvent) -> Request {
-        Request {
-            btc_address: request.btc_address,
-            amount: request.amount,
-            hash: request.refund_id,
-            btc_height: None,
-            deadline: None,
-            request_type: RequestType::Refund,
-            vault_id: request.vault_id.clone(),
-            fee_budget: None,
-        }
-    }
-
     /// returns the fee rate in sat/vByte
-    async fn get_fee_rate<P: OraclePallet + Send + Sync>(&self, parachain_rpc: &P) -> Result<u64, Error> {
+    async fn get_fee_rate<P: OraclePallet + Send + Sync>(&self, parachain_rpc: &P) -> Result<SatPerVbyte, Error> {
         let fee_rate: FixedU128 = parachain_rpc.get_bitcoin_fees().await?;
-        Ok(fee_rate
+        let rate = fee_rate
             .into_inner()
             .checked_div(FixedU128::accuracy())
             .ok_or(Error::ArithmeticUnderflow)?
-            .try_into()?)
+            .try_into()?;
+        Ok(SatPerVbyte(rate))
     }
 
     /// Makes the bitcoin transfer and executes the request
     pub async fn pay_and_execute<
-        B: BitcoinCoreApi + Clone + Send + Sync + 'static,
         P: ReplacePallet
-            + RefundPallet
             + BtcRelayPallet
             + RedeemPallet
             + SecurityPallet
@@ -197,8 +166,9 @@ impl Request {
     >(
         &self,
         parachain_rpc: P,
-        vault: VaultData<B>,
+        vault: VaultData,
         num_confirmations: u32,
+        auto_rbf: bool,
     ) -> Result<(), Error> {
         // ensure the deadline has not expired yet
         if let Some(ref deadline) = self.deadline {
@@ -210,7 +180,13 @@ impl Request {
         }
 
         let tx_metadata = self
-            .transfer_btc(&parachain_rpc, &vault.btc_rpc, num_confirmations, self.vault_id.clone())
+            .transfer_btc(
+                &parachain_rpc,
+                &vault.btc_rpc,
+                num_confirmations,
+                self.vault_id.clone(),
+                auto_rbf,
+            )
             .await?;
         let _ = update_bitcoin_metrics(&vault, tx_metadata.fee, self.fee_budget).await;
         self.execute(parachain_rpc, tx_metadata).await
@@ -225,28 +201,156 @@ impl Request {
             request_id = ?self.hash,
         )
     )]
-    async fn transfer_btc<
-        B: BitcoinCoreApi + Clone,
+    async fn transfer_btc<P: OraclePallet + BtcRelayPallet + VaultRegistryPallet + UtilFuncs + Clone + Send + Sync>(
+        &self,
+        parachain_rpc: &P,
+        btc_rpc: &DynBitcoinCoreApi,
+        num_confirmations: u32,
+        vault_id: VaultId,
+        auto_rbf: bool,
+    ) -> Result<TransactionMetadata, Error> {
+        let fee_rate = self.get_fee_rate(parachain_rpc).await?;
+
+        tracing::debug!("Using fee_rate = {} sat/vByte", fee_rate.0);
+
+        let txid = btc_rpc
+            .create_and_send_transaction(
+                self.btc_address
+                    .to_address(btc_rpc.network())
+                    .map_err(BitcoinError::ConversionError)?,
+                self.amount as u64,
+                fee_rate,
+                Some(self.hash),
+            )
+            .await?;
+
+        self.wait_for_inclusion(parachain_rpc, btc_rpc, num_confirmations, txid, auto_rbf)
+            .await
+    }
+
+    #[tracing::instrument(
+        name = "wait_for_inclusion",
+        skip(self, parachain_rpc, btc_rpc),
+        fields(
+            request_type = ?self.request_type,
+            request_id = ?self.hash,
+        )
+    )]
+    async fn wait_for_inclusion<
         P: OraclePallet + BtcRelayPallet + VaultRegistryPallet + UtilFuncs + Clone + Send + Sync,
     >(
         &self,
         parachain_rpc: &P,
-        btc_rpc: &B,
+        btc_rpc: &DynBitcoinCoreApi,
         num_confirmations: u32,
-        vault_id: VaultId,
+        mut txid: Txid,
+        auto_rbf: bool,
     ) -> Result<TransactionMetadata, Error> {
-        let fee_rate = self.get_fee_rate(parachain_rpc).await?;
+        'outer: loop {
+            tracing::info!("Awaiting bitcoin confirmations for {txid}");
 
-        let tx = btc_rpc
-            .create_transaction(self.btc_address, self.amount as u64, fee_rate, Some(self.hash))
-            .await?;
-        let recipient = tx.recipient.clone();
-        tracing::info!("Sending bitcoin to {}", recipient);
+            let txid_copy = txid; // we get borrow check error if we don't use a copy
 
-        let txid = btc_rpc.send_transaction(tx).await?;
+            let fee_rate_subscription = parachain_rpc.on_fee_rate_change();
+            let fee_rate_subscription = BroadcastStream::new(fee_rate_subscription);
+            let subscription = fee_rate_subscription
+                .map_err(Into::<Error>::into)
+                .and_then(|x| {
+                    tracing::debug!("Received new inclusion fee estimate {}...", x);
 
-        loop {
-            let tx_metadata = btc_rpc.wait_for_transaction_metadata(txid, num_confirmations).await?;
+                    let ret: Result<SatPerVbyte, _> = x
+                        .into_inner()
+                        .checked_div(FixedU128::accuracy())
+                        .ok_or(Error::ArithmeticUnderflow)
+                        .and_then(|x| x.try_into().map(SatPerVbyte).map_err(Into::<Error>::into));
+                    futures::future::ready(ret)
+                })
+                .filter(|_| futures::future::ready(auto_rbf)) // if auto-rbf is disabled, don't propagate the events
+                .try_filter_map(|x| async move {
+                    match btc_rpc.fee_rate(txid).await {
+                        Ok(current_fee) => {
+                            if x > current_fee {
+                                Ok(Some((current_fee, x)))
+                            } else {
+                                Ok(None)
+                            }
+                        }
+                        Err(e) => {
+                            tracing::debug!("Failed to get fee_rate: {}", e);
+                            Ok(None)
+                        }
+                    }
+                })
+                .filter_map(|x| async {
+                    match btc_rpc.is_in_mempool(txid_copy).await {
+                        Ok(false) => {
+                            //   if not in mempool anymore, don't propagate the event (even if it is an error)
+                            tracing::debug!("Txid not in mempool anymore...");
+                            None
+                        }
+                        Ok(true) => {
+                            tracing::debug!("Txid is still in mempool...");
+                            Some(x)
+                        }
+                        Err(e) => {
+                            tracing::warn!("Unexpected bitcoin error: {}", e);
+                            Some(Err(e.into()))
+                        }
+                    }
+                });
+
+            let wait_for_transaction_metadata = btc_rpc.wait_for_transaction_metadata(txid, num_confirmations);
+            futures::pin_mut!(subscription);
+
+            let mut metadata_fut = wait_for_transaction_metadata;
+
+            // The code below looks a little bit complicated but the idea is simple:
+            // we keep waiting for inclusion until it's either included in the bitcoin chain,
+            // or we successfully bump fees
+            let tx_metadata = loop {
+                match futures::future::select(metadata_fut, subscription.next()).await {
+                    Either::Left((result, _)) => break result?,
+                    Either::Right((None, _)) => return Err(Error::RuntimeError(RuntimeError::ChannelClosed)),
+                    Either::Right((Some(Err(x)), continuation)) => {
+                        tracing::warn!("Received an error from the fee rate subscription: {x}");
+                        // continue with the unchanged fee rate
+                        metadata_fut = continuation;
+                    }
+                    Either::Right((Some(Ok((old_fee, new_fee))), continuation)) => {
+                        tracing::debug!("Attempting to bump fee rate from {} to {}...", old_fee.0, new_fee.0);
+                        match btc_rpc
+                            .bump_fee(
+                                &txid,
+                                self.btc_address
+                                    .to_address(btc_rpc.network())
+                                    .map_err(BitcoinError::ConversionError)?,
+                                new_fee,
+                            )
+                            .await
+                        {
+                            Ok(new_txid) => {
+                                tracing::info!("Bumped fee rate. Old txid = {txid}, new txid = {new_txid}");
+                                txid = new_txid;
+                                continue 'outer;
+                            }
+                            Err(x) if x.rejected_by_network_rules() => {
+                                // bump not big enough. This is not unexpected, so only debug print
+                                tracing::debug!("Failed to bump fees: {:?}", x);
+                            }
+                            Err(x) if x.could_be_insufficient_funds() => {
+                                // Unexpected: likely (but no certainly) there are insufficient
+                                // funds in the wallet to pay the increased fee.
+                                tracing::warn!("Failed to bump fees - likely due to insufficient funds: {:?}", x);
+                            }
+                            Err(x) => {
+                                // unexpected error. Just continue waiting for the original tx
+                                tracing::warn!("Failed to bump fees due to unexpected reasons: {:?}", x);
+                            }
+                        };
+                        metadata_fut = continuation;
+                    }
+                }
+            };
 
             tracing::info!("Awaiting parachain confirmations...");
 
@@ -270,7 +374,7 @@ impl Request {
     }
 
     /// Executes the request. Upon failure it will retry
-    async fn execute<P: ReplacePallet + RedeemPallet + RefundPallet>(
+    async fn execute<P: ReplacePallet + RedeemPallet>(
         &self,
         parachain_rpc: P,
         tx_metadata: TransactionMetadata,
@@ -279,10 +383,9 @@ impl Request {
         let execute = match self.request_type {
             RequestType::Redeem => RedeemPallet::execute_redeem,
             RequestType::Replace => ReplacePallet::execute_replace,
-            RequestType::Refund => RefundPallet::execute_refund,
         };
 
-        match (self.fee_budget, tx_metadata.fee.map(|x| x.abs().as_sat() as u128)) {
+        match (self.fee_budget, tx_metadata.fee.map(|x| x.abs().to_sat() as u128)) {
             (Some(budget), Some(actual)) if budget < actual => {
                 tracing::warn!(
                     "Spent more on bitcoin inclusion fee than budgeted: spent {} satoshi; budget was {}",
@@ -308,46 +411,31 @@ impl Request {
         )
         .await?;
 
+        tracing::info!("Executed request #{:?}", self.hash);
+
         Ok(())
     }
 }
 
 /// Queries the parachain for open requests and executes them. It checks the
 /// bitcoin blockchain to see if a payment has already been made.
-pub async fn execute_open_requests<B: BitcoinCoreApi + Clone + Send + Sync + 'static>(
+#[allow(clippy::too_many_arguments)]
+pub async fn execute_open_requests(
     shutdown_tx: ShutdownSender,
     parachain_rpc: InterBtcParachain,
-    vault_id_manager: VaultIdManager<B>,
-    read_only_btc_rpc: B,
+    vault_id_manager: VaultIdManager,
+    read_only_btc_rpc: DynBitcoinCoreApi,
     num_confirmations: u32,
     payment_margin: Duration,
-    process_refunds: bool,
-) -> Result<(), Error> {
+    auto_rbf: bool,
+) -> Result<(), ServiceError> {
     let parachain_rpc = &parachain_rpc;
     let vault_id = parachain_rpc.get_account_id().clone();
 
-    // get all redeem, replace and refund requests
-    let (redeem_requests, replace_requests, refund_requests) = try_join!(
+    // get all redeem and replace requests
+    let (redeem_requests, replace_requests) = try_join!(
         parachain_rpc.get_vault_redeem_requests(vault_id.clone()),
         parachain_rpc.get_old_vault_replace_requests(vault_id.clone()),
-        async {
-            if process_refunds {
-                // for refunds, we use the btc_height of the issue
-                let refunds = parachain_rpc.get_vault_refund_requests(vault_id).await?;
-                stream::iter(refunds)
-                    .then(|(refund_id, refund)| async move {
-                        Ok((
-                            refund_id,
-                            refund.clone(),
-                            parachain_rpc.get_issue_request(refund.issue_id).await?.btc_height,
-                        ))
-                    })
-                    .try_collect()
-                    .await
-            } else {
-                Ok(Vec::new())
-            }
-        },
     )?;
 
     let open_redeems = redeem_requests
@@ -360,15 +448,9 @@ pub async fn execute_open_requests<B: BitcoinCoreApi + Clone + Send + Sync + 'st
         .filter(|(_, request)| request.status == ReplaceRequestStatus::Pending)
         .filter_map(|(hash, request)| Request::from_replace_request(hash, request, payment_margin).ok());
 
-    let open_refunds = refund_requests
-        .into_iter()
-        .filter(|(_, request, _)| !request.completed)
-        .map(|(hash, request, btc_height)| Request::from_refund_request(hash, request, btc_height));
-
     // collect all requests into a hashmap, indexed by their id
     let mut open_requests = open_redeems
         .chain(open_replaces)
-        .chain(open_refunds)
         .map(|x| (x.hash, x))
         .collect::<HashMap<_, _>>();
 
@@ -421,42 +503,18 @@ pub async fn execute_open_requests<B: BitcoinCoreApi + Clone + Send + Sync + 'st
                     }
                 };
 
-                // Payment has been made, but it might not have been confirmed enough times yet
-                let tx_metadata = btc_rpc
-                    .clone()
-                    .wait_for_transaction_metadata(tx.txid(), num_confirmations)
-                    .await;
-
-                match tx_metadata {
+                match request
+                    .wait_for_inclusion(&parachain_rpc, &btc_rpc, num_confirmations, tx.txid(), auto_rbf)
+                    .await
+                {
                     Ok(tx_metadata) => {
-                        // we have enough btc confirmations, now make sure they have been relayed before we continue
-                        if let Err(e) = parachain_rpc
-                            .wait_for_block_in_relay(
-                                H256Le::from_bytes_le(&tx_metadata.block_hash),
-                                Some(num_confirmations),
-                            )
-                            .await
-                        {
-                            tracing::error!(
-                                "Error while waiting for block inclusion for request #{}: {}",
-                                request.hash,
-                                e
-                            );
-                            // continue; try to execute anyway
-                        }
-
-                        match request.execute(parachain_rpc.clone(), tx_metadata).await {
-                            Ok(_) => {
-                                tracing::info!("Executed request #{:?}", request.hash);
-                            }
-                            Err(e) => tracing::error!("Failed to execute request #{}: {}", request.hash, e),
+                        if let Err(e) = request.execute(parachain_rpc.clone(), tx_metadata).await {
+                            tracing::error!("Failed to execute request #{}: {}", request.hash, e);
                         }
                     }
-                    Err(e) => tracing::error!(
-                        "Failed to confirm bitcoin transaction for request {}: {}",
-                        request.hash,
-                        e
-                    ),
+                    Err(e) => {
+                        tracing::error!("Error while waiting for inclusion for request #{}: {}", request.hash, e);
+                    }
                 }
             });
         }
@@ -489,7 +547,10 @@ pub async fn execute_open_requests<B: BitcoinCoreApi + Clone + Send + Sync + 'st
                 request.hash
             );
 
-            match request.pay_and_execute(parachain_rpc, vault, num_confirmations).await {
+            match request
+                .pay_and_execute(parachain_rpc, vault, num_confirmations, auto_rbf)
+                .await
+            {
                 Ok(_) => tracing::info!(
                     "{:?} request #{:?} successfully executed",
                     request.request_type,
@@ -513,7 +574,7 @@ pub async fn execute_open_requests<B: BitcoinCoreApi + Clone + Send + Sync + 'st
 fn get_request_for_btc_tx(tx: &Transaction, hash_map: &HashMap<H256, Request>) -> Option<Request> {
     let hash = tx.get_op_return()?;
     let request = hash_map.get(&hash)?;
-    let paid_amount = tx.get_payment_amount_to(request.btc_address)?;
+    let paid_amount = tx.get_payment_amount_to(request.btc_address.to_payload().ok()?)?;
     if paid_amount as u128 >= request.amount {
         Some(request.clone())
     } else {
@@ -523,21 +584,21 @@ fn get_request_for_btc_tx(tx: &Transaction, hash_map: &HashMap<H256, Request>) -
 
 #[cfg(all(test, feature = "parachain-metadata-kintsugi-testnet"))]
 mod tests {
-    use crate::metrics::PerCurrencyMetrics;
-
     use super::*;
+    use crate::metrics::PerCurrencyMetrics;
     use async_trait::async_trait;
     use bitcoin::{
-        json, Amount, Block, BlockHash, BlockHeader, Error as BitcoinError, GetBlockResult, LockedTransaction, Network,
-        PartialAddress, PrivateKey, Transaction, TransactionMetadata, Txid, PUBLIC_KEY_SIZE,
+        json, Address, Amount, BitcoinCoreApi, Block, BlockHash, BlockHeader, Error as BitcoinError, Hash, Network,
+        PrivateKey, PublicKey, Transaction, TransactionMetadata, Txid,
     };
     use jsonrpc_core::serde_json::{Map, Value};
     use runtime::{
         AccountId, AssetMetadata, BitcoinBlockHeight, BlockNumber, BtcPublicKey, CurrencyId, Error as RuntimeError,
-        ErrorCode, InterBtcRichBlockHeader, InterBtcVault, OracleKey, RawBlockHeader, StatusCode, Token, DOT, IBTC,
+        ErrorCode, FeeRateUpdateReceiver, InterBtcRichBlockHeader, InterBtcVault, OracleKey, RawBlockHeader,
+        StatusCode, Token, DOT, IBTC,
     };
     use sp_core::H160;
-    use std::collections::BTreeSet;
+    use std::{collections::BTreeSet, sync::Arc};
 
     macro_rules! assert_ok {
         ( $x:expr $(,)? ) => {
@@ -607,14 +668,6 @@ mod tests {
             async fn get_replace_dust_amount(&self) -> Result<u128, RuntimeError>;
         }
 
-
-        #[async_trait]
-        pub trait RefundPallet {
-            async fn execute_refund(&self, refund_id: H256, merkle_proof: &[u8], raw_tx: &[u8]) -> Result<(), RuntimeError>;
-            async fn get_refund_request(&self, refund_id: H256) -> Result<InterBtcRefundRequest, RuntimeError>;
-            async fn get_vault_refund_requests(&self, account_id: AccountId) -> Result<Vec<(H256, InterBtcRefundRequest)>, RuntimeError>;
-        }
-
         #[async_trait]
         pub trait BtcRelayPallet {
             async fn get_best_block(&self) -> Result<H256Le, RuntimeError>;
@@ -646,6 +699,7 @@ mod tests {
             async fn wrapped_to_collateral(&self, amount: u128, currency_id: CurrencyId) -> Result<u128, RuntimeError>;
             async fn collateral_to_wrapped(&self, amount: u128, currency_id: CurrencyId) -> Result<u128, RuntimeError>;
             async fn has_updated(&self, key: &OracleKey) -> Result<bool, RuntimeError>;
+            fn on_fee_rate_change(&self) -> FeeRateUpdateReceiver;
         }
     }
 
@@ -671,29 +725,30 @@ mod tests {
             async fn get_proof(&self, txid: Txid, block_hash: &BlockHash) -> Result<Vec<u8>, BitcoinError>;
             async fn get_block_hash(&self, height: u32) -> Result<BlockHash, BitcoinError>;
             async fn get_pruned_height(&self) -> Result<u64, BitcoinError>;
-            async fn is_block_known(&self, block_hash: BlockHash) -> Result<bool, BitcoinError>;
-            async fn get_new_address<A: PartialAddress + Send + 'static>(&self) -> Result<A, BitcoinError>;
-            async fn get_new_public_key<P: From<[u8; PUBLIC_KEY_SIZE]> + 'static>(&self) -> Result<P, BitcoinError>;
-            fn dump_derivation_key<P: Into<[u8; PUBLIC_KEY_SIZE]> + Send + Sync + 'static>(&self, public_key: P) -> Result<PrivateKey, BitcoinError>;
+            async fn get_new_address(&self) -> Result<Address, BitcoinError>;
+            async fn get_new_public_key(&self) -> Result<PublicKey, BitcoinError>;
+            fn dump_derivation_key(&self, public_key: &PublicKey) -> Result<PrivateKey, BitcoinError>;
             fn import_derivation_key(&self, private_key: &PrivateKey) -> Result<(), BitcoinError>;
-            async fn add_new_deposit_key<P: Into<[u8; PUBLIC_KEY_SIZE]> + Send + Sync + 'static>(&self, public_key: P, secret_key: Vec<u8>) -> Result<(), BitcoinError>;
+            async fn add_new_deposit_key(&self, public_key: PublicKey, secret_key: Vec<u8>) -> Result<(), BitcoinError>;
             async fn get_best_block_hash(&self) -> Result<BlockHash, BitcoinError>;
             async fn get_block(&self, hash: &BlockHash) -> Result<Block, BitcoinError>;
             async fn get_block_header(&self, hash: &BlockHash) -> Result<BlockHeader, BitcoinError>;
-            async fn get_block_info(&self, hash: &BlockHash) -> Result<GetBlockResult, BitcoinError>;
             async fn get_mempool_transactions<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<Transaction, BitcoinError>> + Send + 'a>, BitcoinError>;
             async fn wait_for_transaction_metadata(&self, txid: Txid, num_confirmations: u32) -> Result<TransactionMetadata, BitcoinError>;
-            async fn create_transaction<A: PartialAddress + Send + Sync + 'static>(&self, address: A, sat: u64, fee_rate: u64, request_id: Option<H256>) -> Result<LockedTransaction, BitcoinError>;
-            async fn send_transaction(&self, transaction: LockedTransaction) -> Result<Txid, BitcoinError>;
-            async fn create_and_send_transaction<A: PartialAddress + Send + Sync + 'static>(&self, address: A, sat: u64, fee_rate: u64, request_id: Option<H256>) -> Result<Txid, BitcoinError>;
-            async fn send_to_address<A: PartialAddress + Send + Sync + 'static>(&self, address: A, sat: u64, request_id: Option<H256>, fee_rate: u64, num_confirmations: u32) -> Result<TransactionMetadata, BitcoinError>;
+            async fn create_and_send_transaction(&self, address: Address, sat: u64, fee_rate: SatPerVbyte, request_id: Option<H256>) -> Result<Txid, BitcoinError>;
+            async fn send_to_address(&self, address: Address, sat: u64, request_id: Option<H256>, fee_rate: SatPerVbyte, num_confirmations: u32) -> Result<TransactionMetadata, BitcoinError>;
             async fn create_or_load_wallet(&self) -> Result<(), BitcoinError>;
-            async fn wallet_has_public_key<P>(&self, public_key: P) -> Result<bool, BitcoinError> where P: Into<[u8; PUBLIC_KEY_SIZE]> + From<[u8; PUBLIC_KEY_SIZE]> + Clone + PartialEq + Send + Sync + 'static;
-            async fn import_private_key(&self, privkey: PrivateKey) -> Result<(), BitcoinError>;
             async fn rescan_blockchain(&self, start_height: usize, end_height: usize) -> Result<(), BitcoinError>;
-            async fn rescan_electrs_for_addresses<A: PartialAddress + Send + Sync + 'static>(&self, addresses: Vec<A>) -> Result<(), BitcoinError>;
-            async fn find_duplicate_payments(&self, transaction: &Transaction) -> Result<Vec<(Txid, BlockHash)>, BitcoinError>;
+            async fn rescan_electrs_for_addresses(&self, addresses: Vec<Address>) -> Result<(), BitcoinError>;
             fn get_utxo_count(&self) -> Result<usize, BitcoinError>;
+            async fn bump_fee(
+                &self,
+                txid: &Txid,
+                address: Address,
+                fee_rate: SatPerVbyte,
+            ) -> Result<Txid, BitcoinError>;
+            async fn is_in_mempool(&self, txid: Txid) -> Result<bool, BitcoinError>;
+            async fn fee_rate(&self, txid: Txid) -> Result<SatPerVbyte, BitcoinError>;
         }
     }
 
@@ -755,6 +810,8 @@ mod tests {
     }
 
     mod pay_and_execute_redeem_tests {
+        use bitcoin::Hash;
+
         use crate::metrics::PerCurrencyMetrics;
 
         use super::*;
@@ -764,7 +821,7 @@ mod tests {
             current_parachain_height: u32,
             bitcoin_deadline: u32,
             current_bitcoin_height: u32,
-        ) -> (Request, MockProvider, VaultData<MockBitcoin>) {
+        ) -> (Request, MockProvider, VaultData) {
             let mut parachain_rpc = MockProvider::default();
             parachain_rpc
                 .expect_get_bitcoin_fees()
@@ -776,42 +833,31 @@ mod tests {
             parachain_rpc.expect_execute_redeem().returning(|_, _, _| Ok(()));
             parachain_rpc.expect_wait_for_block_in_relay().returning(|_, _| Ok(()));
 
-            let mut btc_rpc = MockBitcoin::default();
+            parachain_rpc
+                .expect_on_fee_rate_change()
+                .returning(|| tokio::sync::broadcast::channel(2).1);
 
-            btc_rpc
+            let mut mock_bitcoin = MockBitcoin::default();
+            mock_bitcoin.expect_network().returning(|| Network::Regtest);
+            mock_bitcoin
                 .expect_get_block_count()
                 .returning(move || Ok(current_bitcoin_height as u64));
-
-            btc_rpc
-                .expect_create_transaction::<BtcAddress>()
-                .returning(|_, _, _, _| {
-                    Ok(LockedTransaction::new(
-                        Transaction {
-                            version: 0,
-                            lock_time: 0,
-                            input: vec![],
-                            output: vec![],
-                        },
-                        Default::default(),
-                        None,
-                    ))
-                });
-
-            btc_rpc.expect_send_transaction().returning(|_| Ok(Txid::default()));
-
-            btc_rpc.expect_wait_for_transaction_metadata().returning(|_, _| {
+            mock_bitcoin
+                .expect_create_and_send_transaction()
+                .returning(|_, _, _, _| Ok(Txid::all_zeros()));
+            mock_bitcoin.expect_wait_for_transaction_metadata().returning(|_, _| {
                 Ok(TransactionMetadata {
-                    txid: Txid::default(),
+                    txid: Txid::all_zeros(),
                     proof: vec![],
                     raw_tx: vec![],
                     block_height: 0,
-                    block_hash: BlockHash::default(),
+                    block_hash: BlockHash::all_zeros(),
                     fee: None,
                 })
             });
-
-            btc_rpc.expect_list_transactions().returning(|_| Ok(vec![]));
-            btc_rpc.expect_get_balance().returning(|_| Ok(Amount::ZERO));
+            mock_bitcoin.expect_list_transactions().returning(|_| Ok(vec![]));
+            mock_bitcoin.expect_get_balance().returning(|_| Ok(Amount::ZERO));
+            let btc_rpc: DynBitcoinCoreApi = Arc::new(mock_bitcoin);
 
             let request = Request {
                 amount: 100,
@@ -840,21 +886,21 @@ mod tests {
         async fn should_pay_and_execute_redeem_if_neither_parachain_nor_bitcoin_deadlines_expired() {
             let (request, parachain_rpc, btc_rpc) = should_pay_and_execute_with_deadlines(100, 50, 100, 50);
 
-            assert_ok!(request.pay_and_execute(parachain_rpc, btc_rpc, 6).await);
+            assert_ok!(request.pay_and_execute(parachain_rpc, btc_rpc, 6, true).await);
         }
 
         #[tokio::test]
         async fn should_pay_and_execute_redeem_if_only_parachain_deadline_expired() {
             let (request, parachain_rpc, btc_rpc) = should_pay_and_execute_with_deadlines(100, 101, 100, 50);
 
-            assert_ok!(request.pay_and_execute(parachain_rpc, btc_rpc, 6).await);
+            assert_ok!(request.pay_and_execute(parachain_rpc, btc_rpc, 6, true).await);
         }
 
         #[tokio::test]
         async fn should_pay_and_execute_redeem_if_only_bitcoin_deadline_expired() {
             let (request, parachain_rpc, btc_rpc) = should_pay_and_execute_with_deadlines(100, 50, 100, 101);
 
-            assert_ok!(request.pay_and_execute(parachain_rpc, btc_rpc, 6).await);
+            assert_ok!(request.pay_and_execute(parachain_rpc, btc_rpc, 6, true).await);
         }
 
         #[tokio::test]
@@ -862,7 +908,7 @@ mod tests {
             let (request, parachain_rpc, btc_rpc) = should_pay_and_execute_with_deadlines(100, 101, 100, 101);
 
             assert_err!(
-                request.pay_and_execute(parachain_rpc, btc_rpc, 6).await,
+                request.pay_and_execute(parachain_rpc, btc_rpc, 6, true).await,
                 Error::DeadlineExpired
             );
         }
@@ -875,8 +921,9 @@ mod tests {
             .expect_get_current_active_block_number()
             .times(1)
             .returning(|| Ok(110));
-        let mut btc_rpc = MockBitcoin::default();
-        btc_rpc.expect_get_block_count().times(1).returning(|| Ok(110));
+        let mut mock_bitcoin = MockBitcoin::default();
+        mock_bitcoin.expect_get_block_count().times(1).returning(|| Ok(110));
+        let btc_rpc: DynBitcoinCoreApi = Arc::new(mock_bitcoin);
         // omitting other mocks to test that they do not get called
 
         let request = Request {
@@ -900,7 +947,7 @@ mod tests {
         };
 
         assert_err!(
-            request.pay_and_execute(parachain_rpc, vault_data, 6).await,
+            request.pay_and_execute(parachain_rpc, vault_data, 6, true).await,
             Error::DeadlineExpired
         );
     }
@@ -923,37 +970,27 @@ mod tests {
             .expect_wait_for_block_in_relay()
             .times(1)
             .returning(|_, _| Ok(()));
+        parachain_rpc
+            .expect_on_fee_rate_change()
+            .returning(|| tokio::sync::broadcast::channel(2).1);
 
-        let mut btc_rpc = MockBitcoin::default();
-        btc_rpc
-            .expect_create_transaction::<BtcAddress>()
-            .returning(|_, _, _, _| {
-                Ok(LockedTransaction::new(
-                    Transaction {
-                        version: 0,
-                        lock_time: 0,
-                        input: vec![],
-                        output: vec![],
-                    },
-                    Default::default(),
-                    None,
-                ))
-            });
-
-        btc_rpc.expect_send_transaction().returning(|_| Ok(Txid::default()));
-
-        btc_rpc.expect_wait_for_transaction_metadata().returning(|_, _| {
+        let mut mock_bitcoin = MockBitcoin::default();
+        mock_bitcoin.expect_network().returning(|| Network::Regtest);
+        mock_bitcoin
+            .expect_create_and_send_transaction()
+            .returning(|_, _, _, _| Ok(Txid::all_zeros()));
+        mock_bitcoin.expect_wait_for_transaction_metadata().returning(|_, _| {
             Ok(TransactionMetadata {
-                txid: Txid::default(),
+                txid: Txid::all_zeros(),
                 proof: vec![],
                 raw_tx: vec![],
                 block_height: 0,
-                block_hash: BlockHash::default(),
+                block_hash: BlockHash::all_zeros(),
                 fee: None,
             })
         });
-
-        btc_rpc.expect_get_balance().returning(|_| Ok(Amount::ZERO));
+        mock_bitcoin.expect_get_balance().returning(|_| Ok(Amount::ZERO));
+        let btc_rpc: DynBitcoinCoreApi = Arc::new(mock_bitcoin);
 
         let request = Request {
             amount: 100,
@@ -975,6 +1012,6 @@ mod tests {
             metrics: PerCurrencyMetrics::dummy(),
         };
 
-        assert_ok!(request.pay_and_execute(parachain_rpc, vault_data, 6).await);
+        assert_ok!(request.pay_and_execute(parachain_rpc, vault_data, 6, true).await);
     }
 }
